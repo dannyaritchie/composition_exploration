@@ -7,6 +7,8 @@ import numpy.ma as ma
 from algorithm import *
 from pathlib import Path
 
+#add test comment
+
 def random_angle(upper, method):
     if method == 'uniform':
         return (np.pi/180)*round(np.random.uniform(-upper,upper),10)
