@@ -185,41 +185,41 @@ setup = all_information()
 setup.f_score_test()
 '''
 #code for plotting m,n vs final dist for differnt a
-dim = 3
 theta_distribution='uniform'
 theta_range=20
 increment=1
 angular_equivalence=20
-name='evaluation_opt/3d/'
+name='../data/3d/'
 batch_size=3
 k=np.pi
-p = Path('evaluation_opt/distances.txt')
+p = Path('../data/distances.txt')
 if not p.is_file():
     print('hi')
     f = p.open(mode = 'w')
-    f.write('dim' + ' ' + 'numer_points' + ' ' + 'number_targets' + ' ' +
+    f.write('dim' + ' ' + 'number_points' + ' ' + 'number_targets' + ' ' +
             'theta_range' + ' ' + 'theta_distribution' + ' ' +
             'angular_equivalence' + ' ' + 'increment' + ' ' +
             'fractional_cutoff' + ' ' + 'batch_size' + ' ' + 'k' + ' ' +
             'distance' + '\n')
     f.close()
-f=p.open(mode = 'a')
-for i in range(1):
-    for a in [0.1]:
-        namea=name + str(a)
-        for m in [100]:
-            print(i)
-            nameam = namea + '_' + str(m)
-            for n in [40]:
-                nameamn = nameam + '_' + str(n) + '.eps'
-                #nameamn=''
-                setup=all_information()
-                distance=setup.evaluation(dim,n,m,theta_range,theta_distribution,angular_equivalence,increment,a,batch_size,k,nameamn,plot_process=True)
-                f.write(str(dim) + ' ' + str(n) + ' ' + str(m) + ' ' +
-                        str(theta_range) + ' ' + theta_distribution + ' ' +
-                        str(angular_equivalence) + ' ' + str(increment) + ' ' +
-                        str(a) + ' ' + str(batch_size) + ' ' + str(k) + ' ' +
-                        str(distance) + '\n')
-f.close()
+for i in range(100):
+    for dim in [3,4]:
+        for a in [0.05,0.075,0.1,0.125]:
+            namea=name + str(a)
+            for m in [10,15,20,25]:
+                nameam = namea + '_' + str(m)
+                for n in [5,10,15,20]:
+                    print(i)
+                    nameamn = nameam + '_' + str(n) + '.eps'
+                    nameamn=''
+                    setup=all_information()
+                    distance=setup.evaluation(dim,n,m,theta_range,theta_distribution,angular_equivalence,increment,a,batch_size,k,nameamn,plot_process=False)
+                    f=p.open(mode = 'a')
+                    f.write(str(dim) + ' ' + str(n) + ' ' + str(m) + ' ' +
+                            str(theta_range) + ' ' + theta_distribution + ' ' +
+                            str(angular_equivalence) + ' ' + str(increment) + ' ' +
+                            str(a) + ' ' + str(batch_size) + ' ' + str(k) + ' ' +
+                            str(distance) + '\n')
+                    f.close()
  
 

@@ -9,8 +9,38 @@ import scipy.stats
 from ternary.helpers import simplex_iterator
 import random
 import numba
-from numba import jit
+from numba import njit
 import time
+
+@njit(parallel=True)
+def expected_gain_in_info_numba_recieve(f,n,m,l,o,a,b,x,k):
+        f_broad = np.broadcast_to(f,(m,n,l))
+        #ab
+        a_broad=np.broadcast_to(a,(m,n,o))
+        b_broad=np.swapaxes(np.broadcast_to(b,(n,m,o)),0,1)
+        ab = b_broad-a_broad
+        ab_norm = np.linalg.norm(ab,axis=2)
+        ab_norm_broad = np.moveaxis(np.broadcast_to(ab_norm,(o,m,n)),0,2)
+        ab_normed = ab/ab_norm_broad
+        ab_normed_broad = np.swapaxes(np.broadcast_to(ab_normed,(l,m,n,o)),0,1)
+        #ax
+        a_broad=np.broadcast_to(a,(l,n,o))
+        x_broad=np.swapaxes(np.broadcast_to(x,(n,l,o)),0,1)
+        ax = x_broad-a_broad
+        ax_broad = np.broadcast_to(ax,(m,l,n,o))
+        ax_norm = np.linalg.norm(ax,axis=2)
+        ax_norm_broad = np.broadcast_to(ax_norm,(m,l,n))
+        dot = np.ones((m,l,n))
+        np.divide(np.sum(ax_broad*ab_normed_broad,axis=3),ax_norm_broad,out=dot,where=ax_norm_broad!=0)
+        dot=np.clip(dot,-1,1)
+        angle=np.arccos(dot)
+        info=np.exp(-1*angle/k)
+        info=np.swapaxes(info,1,2) # mnl
+        info=info/np.moveaxis(np.broadcast_to(np.sum(info,axis=2),(l,m,n)),0,2)
+        post_f = f_broad*info
+        post_f=post_f/np.moveaxis(np.broadcast_to(np.sum(post_f,axis=2),(l,m,n)),0,2)
+        print(expected_gain_in_info_numba_recieve.parallel_diagnostics(level=4))
+        return post_f
 
 def get_cmap(n, name='hsv'):
     '''Returns a function that maps each index in 0, 1, ..., n-1 to a distinct 
@@ -563,6 +593,25 @@ class all_information:
         change_score=original_score-post_score
         return change_score
 
+
+
+    def expected_gain_in_info_numba_send(self,k=np.pi):
+        f = self.values[:,0]
+        n = len(self.exploration_points)
+        m = len(self.exploration_targets)
+        l = len(f)
+        o = self.omega.shape[1]
+        a = self.exploration_points
+        b = self.exploration_targets
+        x = self.omega
+        post_f=expected_gain_in_info_numba_recieve(f,n,m,l,o,a,b,x,k)
+        print('a')
+        print(expected_gain_in_info_numba_recieve.parallel_diagnostics(level=4))
+        original_score = scipy.stats.skew(np.sort(f))
+        post_score=scipy.stats.skew(np.sort(post_f,axis=2),axis=2)
+        change_score=original_score-post_score
+        return change_score
+
     def evaluation_test(self,dim=3,num_points=5,theta=20,theta_distribution='uniform', angular_equivalence=20,increment=1):
         self.add_random_initial(dim)
         self.add_random_goal(dim)
@@ -575,7 +624,7 @@ class all_information:
         self.prod_theta_score_n(dim=dim,increment=increment,k=np.pi,return_type='with_index',create_grid=True)
         self.get_points_targets_for_exploration_evaluation(a=0.2,num_points=10,num_targets=100)
         weights = self.weight_points_for_exploration_evaluation(cutoff = angular_equivalence)
-        change_score = self.expected_gain_in_info()
+        change_score = self.expected_gain_in_info_numba_send()
         expected_score=np.sum(weights*change_score,axis=0)
         sorted_trial_points=self.exploration_points[expected_score.argsort()]
         self.points=np.append(self.points,np.array([sorted_trial_points[-1]]))
@@ -599,21 +648,33 @@ class all_information:
             if dim != 3:
                 print('Error, cant plot for dim != 3')
                 return
-        f, axn = plt.subplots(2,3)
         self.usual_setup(dim,theta_range,theta_distribution,batch_size)
+        f, axn = (None,None)
         if plot_process:
+            f, axn = plt.subplots(2,3)
             f.set_figheight(15)
             f.set_figwidth(30)
+        t0 = time.time()
         self.prod_theta_score_n(dim=dim,increment=increment,k=np.pi,return_type='with_index')
         values=self.values
+        t1 = time.time()
         for i in range(batch_size):
-            if i < 2:
-                ax = axn[0][1+i]
-            else:
-                ax = axn[1][2-i]
+            t15 = time.time()
+            ax = None
+            if plot_process:
+                if i < 2:
+                    ax = axn[0][1+i]
+                else:
+                    ax = axn[1][2-i]
+            t2 = time.time()
+            print('Time nil', t2-t15)
             self.get_points_targets_for_exploration_evaluation(a=considered_fraction,num_points=num_points,num_targets=num_targets)
+            t3 = time.time()
+            print('Time gp', t3-t2)
             weights=self.weight_points_for_exploration_evaluation(cutoff = angular_equivalence)
+            t35 = time.time()
             change_score = self.expected_gain_in_info()
+            t37 = time.time()
             expected_score=np.sum(weights*change_score,axis=0)
             sorted_trial_points=self.exploration_points[expected_score.argsort()]
             if plot_process:
@@ -625,9 +686,14 @@ class all_information:
             self.points=np.append(self.points,np.array([sorted_trial_points[-1]]),axis=0)
             self.create_false_line(len(self.lines))
             values_extra=self.prod_theta_score_n(dim=dim,increment=increment,k=np.pi,return_type='to_include',a=np.array([self.points[-1]]),b=np.array([self.end_points[-1]]))
+            t4 = time.time()
+            print('Time wp', t35-t3)
+            print('Time EXG', t37-t35)
+            print('Time other', t4-t37)
             #values_extra=values_extra
             self.values[:,0]=self.values[:,0]*values_extra
             #self.values[:,0]=self.values[:,0]/np.sum(self.values[:,0])
+        t5 = time.time()
         if plot_process:
             #assume b = 3
             ax = axn[1][1]
@@ -646,13 +712,17 @@ class all_information:
             tax = self.plot(True,True,True,show=False,compute_theta=False,tax=tax)
             figure, tax = ternary.figure(ax = axn[1][2], scale = 100)
             tax=self.plot_theta_score(tax,compute=False,points=[0])
-        plt.savefig('test.eps',dpi=800)
-        plt.clf()
+            plt.savefig('test.eps',dpi=800)
+            plt.clf()
         if plot:
             self.set_labels(method='1_batch',batch_size=batch_size)
             self.plot(True,True,True,angle_product_heatmap=True,
                       title = 'heatmap', show=False, save=True,
                       name = plot,compute_theta=False)
+        t6 = time.time()
+        print('Time prod', t1-t0)
+        print('Time loop', t5-t1)
+        print('Time fin', t6-t5)
         return self.distance_to_optimal_f()
 
     def f_score(self,f,frac=0.9,method='sorted_score_at_frac'):
