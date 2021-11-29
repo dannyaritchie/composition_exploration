@@ -191,17 +191,17 @@ angular_equivalence=20
 name='evaluation_opt/3d/'
 batch_size=3
 k=np.pi
-p = Path('evaluation_opt/distances.txt')
-if not p.is_file():
-    print('hi')
-    f = p.open(mode = 'w')
-    f.write('dim' + ' ' + 'numer_points' + ' ' + 'number_targets' + ' ' +
-            'theta_range' + ' ' + 'theta_distribution' + ' ' +
-            'angular_equivalence' + ' ' + 'increment' + ' ' +
-            'fractional_cutoff' + ' ' + 'batch_size' + ' ' + 'k' + ' ' +
-            'distance' + '\n')
-    f.close()
-f=p.open(mode = 'a')
+#p = Path('evaluation_opt/distances.txt')
+#if not p.is_file():
+#    print('hi')
+#    f = p.open(mode = 'w')
+#    f.write('dim' + ' ' + 'numer_points' + ' ' + 'number_targets' + ' ' +
+#            'theta_range' + ' ' + 'theta_distribution' + ' ' +
+#            'angular_equivalence' + ' ' + 'increment' + ' ' +
+#            'fractional_cutoff' + ' ' + 'batch_size' + ' ' + 'k' + ' ' +
+#            'distance' + '\n')
+#    f.close()
+#f=p.open(mode = 'a')
 for i in range(1):
     for a in [0.1]:
         namea=name + str(a)
@@ -213,11 +213,13 @@ for i in range(1):
                 #nameamn=''
                 setup=all_information()
                 distance=setup.evaluation(dim,n,m,theta_range,theta_distribution,angular_equivalence,increment,a,batch_size,k,nameamn,plot_process=True)
+                '''
                 f.write(str(dim) + ' ' + str(n) + ' ' + str(m) + ' ' +
                         str(theta_range) + ' ' + theta_distribution + ' ' +
                         str(angular_equivalence) + ' ' + str(increment) + ' ' +
                         str(a) + ' ' + str(batch_size) + ' ' + str(k) + ' ' +
                         str(distance) + '\n')
-f.close()
+                        '''
+#f.close()
  
 

@@ -1,24 +1,28 @@
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
-path='evaluation_opt/distances.txt'
-df = pd.read_csv(path,sep=' ',header=0)
-for i in df.columns:
-    print(i)
-df=df[(df['number_points']==15) | (df['number_points']==25)]
-dfa=df[df['number_points']==15]
-dfb=df[df['number_points']==25]
-dfaa=dfa[dfa['fractional_cutoff']==0.1]
-dfab=dfa[dfa['fractional_cutoff']==0.2]
-dfba=dfb[dfb['fractional_cutoff']==0.1]
-dfbb=dfb[dfb['fractional_cutoff']==0.2]
-
+path='../data/evaluation_opt/distances.txt'
+df_all = pd.read_csv(path,sep=' ',header=0)
+#Data Summary
+print('--------')
+for i in df_all.columns:
+    print(i, df_all[i].unique())
+print('--------')
+for i in df_all.columns[:-1]:
+    for j in df_all[i].unique():
+        print(i,j,len(df_all[df_all[i]==j]))
+print('--------')
+df_all=df_all[df_all['fractional_cutoff']!=0.2]
+#df=df_all[(df_all["number_points"] == 20) & (df_all['fractional_cutoff']==0.1)]
+df=df_all[(df_all["number_points"] == 20)]
+#df=df_all[(df_all['fractional_cutoff']==0.1)]
 g = sns.relplot(
-    data=df,
-    x="number_targets", y="distance", col="number_points",
-    hue="fractional_cutoff", size='fractional_cutoff',
-    style='fractional_cutoff',
-    kind="line", palette="crest", linewidth=4, zorder=5,
+    data=df_all,
+    x="number_targets", y="distance",
+    col="number_points",
+    hue="fractional_cutoff",style='fractional_cutoff',
+    kind="line",
+    palette="crest", linewidth=4, zorder=5,
     col_wrap=3, height=2, aspect=1.5,
 )
 
