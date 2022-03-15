@@ -1,0 +1,176 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib import cm
+
+class visualise_square:
+    def __init__(self,x,y):
+        self.X=x
+        self.Y=y
+
+    def generate_grid(self):
+        x=np.empty((3))
+    
+    def plot_omega(self,omega,ax=None,show=False,cube_size=None):
+        self.plot_scatter(ax,omega,show,cube_size=cube_size)
+    
+    def plot_scatter_from_standard(self,ax,points_standard,show=True):
+        xs=[None]*len(points_standard)
+        ys=[None]*len(points_standard)
+        for n,i in enumerate(points_standard):
+            x=np.dot(self.X,i)
+            y=np.dot(self.Y,i)
+            xs[n]=x
+            ys[n]=y
+        ax.scatter(xs,ys,s=10)
+        ax.set_xlim(-1,1)
+        ax.set_ylim(-1,1)
+        if show:
+            plt.show()
+
+    def plot_scatter(self,ax,points_2d,lim=True,show=False,cube_size=None,**kwargs):
+        if ax is None:
+            fig,ax=plt.subplots(1,1)
+        xs=points_2d[:,0]
+        ys=points_2d[:,1]
+        if cube_size is not None:
+            xs=xs/cube_size
+            ys=ys/cube_size
+        ax.scatter(xs,ys,**kwargs)
+        if lim:
+            ax.set_xlim(-1,1)
+            ax.set_ylim(-1,1)
+        if show:
+            plt.show()
+
+    def set_means(self,means):
+        self.means=means
+
+    def set_sigmas(self,sigmas):
+        self.sigmas=sigmas
+
+    def plot_small_balls(self):
+        for i,j in zip(self.means,self.sigmas):
+            print(i)
+            print(j)
+
+    def draw_ball_fig(self, merged_ball, balls, omega, cube_size=None):
+            fig, axs = plt.subplots(2,2)
+            span = 1
+            xmin = -span
+            ymin = -span
+            xmax = span
+            ymax = span
+            N=50
+            self.plot_balls(balls,xmin,xmax,ymin,ymax,N,
+                            ax=axs[0][0],show=False)
+            self.plot_ball(merged_ball,xmin,xmax,ymin,ymax,N,
+                           ax=axs[0][1],show=False)
+            self.plot_omega(omega,axs[1][0],show=False,cube_size=cube_size)
+            plt.show()
+
+    def plot_balls(self,balls,xmin=-2,xmax=2,ymin=-2,ymax=2,
+               N=100,ax=None,show=True):
+            X = np.linspace(xmin, xmax, N)
+            Y = np.linspace(ymin, ymax, N)
+            X, Y = np.meshgrid(X, Y)
+            pos=np.empty(X.shape+(2,))
+            pos[:,:,0]=X
+            pos[:,:,1]=Y
+            z=np.zeros((N,N))
+            for mean,sigmas in zip(balls[0],balls[1]):
+                print('N ball mean',mean)
+                sigma=np.diag(sigmas)
+                n = mean.shape[0]
+                Sigma_det = np.linalg.det(sigma)
+                Sigma_inv = np.linalg.inv(sigma)
+                N = np.sqrt((2*np.pi)**n * Sigma_det)
+                # This einsum call calculates (x-mu)T.Sigma-1.(x-mu) in a vectorized
+                # way across all the input variables.
+                fac = np.einsum('...k,kl,...l->...', pos-mean, Sigma_inv,
+                                pos-mean)
+                tZ = np.exp(-fac / 2) / N
+                z = z + tZ
+            if ax is None:
+                fig,ax=plt.subplots(1,1)
+            cset = ax.contourf(X, Y, z, cmap=cm.viridis)
+            if show:
+                plt.show()
+
+        #takes ball in representation set of means, set of sigmas
+
+    def plot_ball(self,ball,xmin,xmax,ymin,ymax,N,ax,show=True):
+        print(ball[0])
+        print(ball[1])
+        self.sigma=np.diag(ball[1])
+        self.mean=ball[0]
+        self.draw_ball(xmin=xmin,xmax=xmax,ymin=ymin,ymax=ymax,N=N,
+                      ax=ax)
+        if show:
+            plt.show()
+
+
+    def draw_ball(self,N=50,xmin=-3,xmax=3,ymin=-3,ymax=3,ax=None):
+            X = np.linspace(xmin, xmax, N)
+            Y = np.linspace(ymin, ymax, N)
+            X, Y = np.meshgrid(X, Y)
+            pos=np.empty(X.shape+(2,))
+            pos[:,:,0]=X
+            pos[:,:,1]=Y
+            n = self.mean.shape[0]
+            Sigma_det = np.linalg.det(self.sigma)
+            Sigma_inv = np.linalg.inv(self.sigma)
+            N = np.sqrt((2*np.pi)**n * Sigma_det)
+            # This einsum call calculates (x-mu)T.Sigma-1.(x-mu) in a vectorized
+            # way across all the input variables.
+            fac = np.einsum('...k,kl,...l->...', pos-self.mean, Sigma_inv,
+                            pos-self.mean)
+
+            Z = np.exp(-fac / 2) / N
+            # Create a surface plot and projected filled contour plot under it.
+            if ax is None:
+                fig = plt.figure()
+                ax = plt.gca()
+            #ax.plot_surface(X, Y, Z, rstride=3, cstride=3, linewidth=1, antialiased=True,
+                            #cmap=cm.viridis)
+
+                cset = ax.contourf(X, Y, Z, cmap=cm.viridis)
+            else:
+                ax.contourf(X,Y,Z,cmap=cm.viridis)
+
+    def draw_lines(self,lines,ax,show=True,**kwargs):
+        for line in lines:
+            ax.plot([line[0][0],line[1][0]],[line[0][1],line[1][1]],**kwargs)
+        if show:
+            plt.show()
+
+    def test_fig(self,goal,points,lines,heatmap,xlim,ylim,omega,mean):
+        f,ax=plt.subplots(1,2)
+        self.goal_fig(goal,points,lines,ax=ax[0],show=False,lims=[xlim,ylim])
+        self.plot_scatter(ax[0],np.array([mean]),show=False,lim=False,marker='x',c='green',label='mean')
+        self.plot_heatmap(heatmap,xlim[0],xlim[1],ylim[0],ylim[1],ax=ax[1],show=False)
+        plt.show()
+
+    def goal_fig(self,goal,points,lines,ax=None,show=True,lims=None):
+        if ax is None:
+            fig=plt.figure()
+            ax=fig.add_subplot(1,1,1)
+        self.plot_scatter(ax,np.array([goal]),show=False,lim=False,marker='x',c='red',label='Goal')
+        self.plot_scatter(ax,points,show=False,lim=None,label='Sample point')
+        self.draw_lines(lines,ax,show=False)
+        ax.legend()
+        if lims is not None:
+            ax.set_xlim(lims[0][0],lims[0][1])
+            ax.set_ylim(lims[1][0],lims[1][1])
+        if show:
+            plt.show()
+
+    def plot_heatmap(self,heatmap,xmin,xmax,ymin,ymax,ax=None,show=True,**kwargs):
+        if ax is None:
+            fig=plt.figure()
+            ax=fig.add_subplot(1,1,1)
+        extent=(xmin,xmax,ymin,ymax)
+        ax.imshow(heatmap,origin='lower',extent=extent)
+        #ax.set_xlim([xlim[0],xlim[1]])
+        #ax.set_ylim([ylim[0],ylim[1]])
+        if show:
+            plt.show()

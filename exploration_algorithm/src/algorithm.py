@@ -11,6 +11,12 @@ import random
 import numba
 from numba import njit
 import time
+from plotter import *
+from errorpropagator import *
+from visualisesquare import *
+from wtconversion import *
+from scipy import interpolate
+SQRT3OVER2 = np.sqrt(3) / 2.
 
 @njit(parallel=True)
 def expected_gain_in_info_numba_recieve(f,n,m,l,o,a,b,x,k):
@@ -42,6 +48,24 @@ def expected_gain_in_info_numba_recieve(f,n,m,l,o,a,b,x,k):
         print(expected_gain_in_info_numba_recieve.parallel_diagnostics(level=4))
         return post_f
 
+def cartesian(arrays, out=None):
+    arrays = [np.asarray(x) for x in arrays]
+    dtype = arrays[0].dtype
+
+    n = np.prod([x.size for x in arrays])
+    if out is None:
+        out = np.zeros([n, len(arrays)], dtype=dtype)
+
+    #m = n / arrays[0].size
+    m = int(n / arrays[0].size) 
+    out[:,0] = np.repeat(arrays[0], m)
+    if arrays[1:]:
+        cartesian(arrays[1:], out=out[0:m, 1:])
+        for j in range(1, arrays[0].size):
+        #for j in xrange(1, arrays[0].size):
+            out[j*m:(j+1)*m, 1:] = out[0:m, 1:]
+    return out
+
 def get_cmap(n, name='hsv'):
     '''Returns a function that maps each index in 0, 1, ..., n-1 to a distinct 
     RGB color; the keyword argument name must be a standard mpl colormap name.'''
@@ -63,11 +87,22 @@ class all_information:
         self.labels = None
         self.optimal_point=None
 
+    def setup(self,normal_vectors,contained_point,cube_size,sigma):
+        self.normal_vectors=normal_vectors
+        self.cube_size=cube_size
+        self.contained_point=contained_point
+        self.sigma=sigma
+        self.create_omega_constrained(normal_vectors,cube_size,contained_point)
+
     def getdistance(self):
         return np.sqrt(np.sum((self.goal-self.optimal_point)**2))
 
     def add_point(self,point):
-        self.points = np.append(self.points,point,axis=0)
+        self.points = np.vstack([self.points,point])
+
+    def add_random_point(self,dim):
+        npoint = np.array([self.random_point(dim)])
+        self.points = np.append(self.points,npoint,axis=0)
 
     def sampleonline(self, b, line_index):
         min_steps=9999
@@ -97,8 +132,36 @@ class all_information:
             self.labels = {'initial':[0,1],
                            'primary':[1,len(self.lines)-batch_size],
                            'secondary':[len(self.lines)-batch_size,len(self.lines)]}
+        if method == 'custom_figure':
+            self.labels = {'Initial samples':[0,101]}
+        if method == 'many lines one point':
+            self.labels = {'point':[0,len(self.points)]}
 
 
+    def add_average_comp(self):
+        avg = np.array([0,0,0])
+        for i in self.points:
+            avg = i+avg
+        avg = avg/3
+        self.points = np.append(self.points,np.array([avg]),axis=0)
+
+    def add_point_in_ball(self):
+        x = self.points[-1]
+        print('aa')
+        print(x)
+        y = x + [-6,4,2]
+        print(y)
+        self.points = np.append(self.points,np.array([y]),axis=0)
+
+    def add_line_from_ball_through_sample(self,form):
+        if form == 'fake':
+            v = self.points[0] - self.points[-1]
+        if form == 'real':
+             v = self.points[0] - self.points[-2]
+             self.points=np.append(self.points,np.array([self.points[0]+0.3*v]),axis=0)
+             print('ooo')
+             print(self.points)
+        return v
 
     def create_line_from_point(self,point_index,angle):
         point = self.points[point_index]
@@ -131,7 +194,7 @@ class all_information:
             for pi,vi in zip(point,line):
                 if vi < 0:
                     if pi/(-1*vi) < min_steps:
-                        mifn_steps = -1*pi/vi
+                        min_steps = -1*pi/vi
             final_point = np.add(point,line*min_steps)
             ab = final_point-point
             printid = True
@@ -147,20 +210,22 @@ class all_information:
 
     def plot(self,goal,points,lines,
              optimal_point = False,angle_product_heatmap = False,
-             title = 'heatmap', show=True, save=False, scale=100,
-             name = 'test.png',compute_theta=True ,tax=None):
+             title = '', show=True, save=False, scale=100,
+             name = 'test.png',compute_theta=True ,tax=None, ball=False,
+             line=False):
         if tax is None:
             figure, tax = ternary.figure(scale=scale)
         tax.set_title(title,fontsize = 10)
         number_colours = 0
         subplots = False
         if (lines):
-            number_colours += len(self.lines)
+           # number_colours += len(self.lines)
+            number_colours += 1
         if goal:
             number_colours += 1
         if  points:
             if self.labels:
-                number_colours+=len(self.labels)
+                number_colours+=len(self.labels)+1
         if optimal_point:
             number_colours +=1
         if angle_product_heatmap:
@@ -181,6 +246,15 @@ class all_information:
             '''
         cmap = get_cmap(number_colours)
         used_colours = 0
+        #firgure gen
+        if line:
+            self.plot_line(tax,cmap,used_colours,self.points[-1],
+                           self.add_line_from_ball_through_sample('fake'))
+            self.plot_line(tax,cmap,used_colours-1,self.points[-2],
+                           self.add_line_from_ball_through_sample('real'))
+        if ball:
+            self.plot_points(tax,cmap,used_colours,ball=True)
+        #end
         if goal:
             self.plot_goal(tax,cmap(used_colours))
             used_colours += 1
@@ -197,7 +271,7 @@ class all_information:
         tax.ticks(axis='lbr', linewidth=1, multiple = 10, fontsize=5)
         ax=tax.get_axes()
         box = ax.get_position()
-        ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+        ax.set_position([box.x0, box.y0, box.width * 0.7, box.height])
         ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
         if subplots:
             f.set_size_inches(25,10)
@@ -221,17 +295,46 @@ class all_information:
             c_edge_intersect = np.append(c_edge_intersect,[final_point],axis=0)
 
         for n,i in enumerate(self.lines):
-            tax.line(self.points[n], c_edge_intersect[n], linewidth=1.,
+            '''
+            tax.line(self.points[n], c_edge_intersect[n], linewidth=0.5,
                      color=cmap(n+used_colours), linestyle="-",label=str(n))
+            '''
+            tax.line(self.points[n], c_edge_intersect[n], linewidth=0.5,
+                     color=cmap(used_colours+1), linestyle="-")
         return tax
 
-    def plot_points(self,tax,cmap,used_colours):
-        for n,key in enumerate(self.labels):
-            tax.scatter(self.points[self.labels[key][0]:self.labels[key][1]],
-                        marker='x',s=50,linewidth = 1.,
-                        color=cmap(used_colours+n),
-                        label = key)
+    def plot_line(self,tax,cmap,used_colours,point,line):
+        c_edge_intersect = np.empty((0,self.points.shape[1]))
+        min_steps=9999
+        for pi,vi in zip(point,line):
+            if vi < 0:
+                if pi/(-1*vi) < min_steps:
+                    min_steps = -1*pi/vi
+        final_point = np.add(point,line*min_steps)
+        c_edge_intersect = np.append(c_edge_intersect,[final_point],axis=0)
+        tax.line(point, c_edge_intersect[0], linewidth=0.5,
+                 color=cmap(2+used_colours), linestyle="-")
+
+        #tax.line(point,point+line)
         return tax
+
+
+
+    def plot_points(self,tax,cmap,used_colours,ball=False):
+        if not ball:
+            print(self.labels)
+            print('poo')
+            for n,key in enumerate(self.labels):
+                print(n)
+                tax.scatter(self.points[self.labels[key][0]:self.labels[key][1]],
+                            marker='x',s=30,linewidth = 0.5,
+                            color=cmap(used_colours+n),
+                            label = key,zorder=5)
+            return tax
+        else:
+            print('here')
+            tax.scatter([self.points[-2]],marker='o',s=500,zorder=0)
+            return tax
 
     def plot_optimal_point(self,tax,colour):
         tax.scatter([self.optimal_point], marker='x', s=50,
@@ -239,7 +342,7 @@ class all_information:
         return tax
 
     def plot_goal(self,tax,colour):
-        tax.scatter([self.goal], marker='x', s=50, color=colour,label='target')
+        tax.scatter([self.goal], marker='x', s=30, linewidth=0.5, color=colour,label='target')
         return tax
 
     def least_squares_solution(self):
@@ -430,15 +533,53 @@ class all_information:
             self.plotting_indicis = keys
         return omega
 
+
+
+
+    def reduce_omega(self,omega,point_index_start,point_index_end,backstep,cone_angle):
+        print('start length: ', len(omega))
+        cone_angle=np.pi*cone_angle/180
+        a=self.points[point_index_start:point_index_end]
+        b=self.end_points[point_index_start:point_index_end]
+        ab=b-a
+        a = a-backstep*ab
+        l = len(omega)
+        n = len(a)
+        o = a.shape[1]
+        print(a.shape[0])
+        a_broad = np.broadcast_to(a,(l,n,o))
+        omega_broad = np.swapaxes(np.broadcast_to(omega,(n,l,o)),0,1)
+        ax = omega_broad-a_broad
+        ax_norms=np.linalg.norm(ax,axis=2)
+        ab_norms=np.broadcast_to(np.linalg.norm(ab,axis=1),(l,n))
+        norms=ax_norms*ab_norms
+        ab_broad=np.broadcast_to(ab,(l,n,o))
+        dot=np.ones((l,n))
+        np.divide((ab_broad*ax).sum(axis=2),norms,out=dot,where=norms!=0)
+        dot=np.clip(dot,-1,1)
+        theta = np.arccos(dot)
+        rows,cols = np.where(theta>cone_angle)
+        rows=np.unique(rows)
+        print(len(omega)-len(rows))
+        omega=np.delete(omega,rows,axis=0)
+        print('end length: ', len(omega))
+        return omega
+
+
+
+
     def prod_theta_score_n(self,k=np.pi,dim=4,increment=10,
                            return_type = None, timed=False,
-                          a=None,b=None):
+                          a=None,b=None,reduce=False):
         #Optimise so that End points MUST be 1 away from start points
         #block 1
         if a is None:
             self.omega = self.create_omega(increment,dim)
+            print('nnnn')
             a = self.points
             b = self.end_points
+        if reduce:
+            self.omega = self.reduce_omega(self.omega,0,len(a),0.5,45)
         omega=self.omega
         count = len(omega)
         m = len(b) #nimber of lines
@@ -466,7 +607,7 @@ class all_information:
         #broadcast to m by count by dim
         ab_normed_broad = np.swapaxes(np.broadcast_to(ab_normed,(count,m,dim)),0,1)
         dot=np.ones((m,count))
-        dot = np.divide((ab_normed_broad*a_omega).sum(axis=2),
+        np.divide((ab_normed_broad*a_omega).sum(axis=2),
                         a_omega_norm,out=dot,where=a_omega_norm!=0)
         dot = np.clip(dot,-1,1)
         theta = np.arccos(dot)
@@ -491,8 +632,8 @@ class all_information:
         if timed:
             print('Block 2: ', t2-t1)
 
-    def get_points_targets_for_exploration_evaluation(self, method='inc_exploration',
-        a = 0.2, num_points = 10, num_targets = 100):
+    def get_points_targets_for_exploration_evaluation(
+        self,method='inc_exploration',a = 0.2,num_points=10,num_targets=100):
     #implementation notes
     #could write a ufunc to mask all values over a certain amount
     #could sort then take some chunk
@@ -550,7 +691,8 @@ class all_information:
         dot = np.clip(dot,-1,1)
         angle=np.arccos(dot)
         masked_angle = ma.masked_greater(angle,np.pi*cutoff/180)
-        f = self.values[:,0]/np.sum(self.values[:,0])
+        #f = self.values[:,0]/np.sum(self.values[:,0])
+        f=self.values/np.sum(self.values)
         f_broad = np.broadcast_to(f,(m,n,l))
         f_broad_masked = ma.masked_array(f_broad, mask = masked_angle.mask)
         weights = f_broad_masked.sum(axis=2)
@@ -558,7 +700,8 @@ class all_information:
         return weights
 
     def expected_gain_in_info(self,k=np.pi):
-        f = self.values[:,0]
+        #f = self.values[:,0]
+        f=self.values
         n = len(self.exploration_points)
         m = len(self.exploration_targets)
         l = len(f)
@@ -586,10 +729,15 @@ class all_information:
         info=np.exp(-1*angle/k)
         info=np.swapaxes(info,1,2) # mnl
         info=info/np.moveaxis(np.broadcast_to(np.sum(info,axis=2),(l,m,n)),0,2)
-        original_score = scipy.stats.skew(np.sort(f))
+        #original_score = scipy.stats.skew(np.sort(f))
+        original_score = self.f_score(f,method='variance')
         post_f = f_broad*info
         post_f=post_f/np.moveaxis(np.broadcast_to(np.sum(post_f,axis=2),(l,m,n)),0,2)
-        post_score=scipy.stats.skew(np.sort(post_f,axis=2),axis=2)
+        #post_score=scipy.stats.skew(np.sort(post_f,axis=2),axis=2)
+        post_score=np.empty((post_f.shape[0],post_f.shape[1]))
+        for n,i in enumerate(post_f):
+            for m,j in enumerate(i):
+                post_score[n][m]=self.f_score(j,method='variance')
         change_score=original_score-post_score
         return change_score
 
@@ -637,16 +785,16 @@ class all_information:
         self.add_random_goal(dim)
         self.lines = np.empty((0,dim))
         self.end_points = np.empty((0,dim))
-        self.create_line_from_point_nd(dim, 0, theta_range, theta_distribution)
+        self.create_line_from_point_nd(dim,0,theta_range,theta_distribution,charge_constraint=charge_constraint)
         target_points = self.sampleonline(batch_size,0)
         for i in range(target_points[0],target_points[1]):
-            self.create_line_from_point_nd(dim,i,theta_range,theta_distribution)
+            self.create_line_from_point_nd(dim,i,theta_range,theta_distribution,charge_constraint=charge_constraint)
 
 
     def evaluation(self,dim,num_points,num_targets,theta_range,theta_distribution, angular_equivalence,increment,considered_fraction,batch_size,k,plot='',plot_process=False):
         if plot_process:
             if dim != 3:
-                print('Error, cant plot for dim != 3')
+                print('Error,np.std cant plot for dim != 3')
                 return
         self.usual_setup(dim,theta_range,theta_distribution,batch_size)
         f, axn = (None,None)
@@ -655,7 +803,7 @@ class all_information:
             f.set_figheight(15)
             f.set_figwidth(30)
         t0 = time.time()
-        self.prod_theta_score_n(dim=dim,increment=increment,k=np.pi,return_type='with_index')
+        self.prod_theta_score_n(dim=dim,increment=increment,k=np.pi,return_type='with_index',reduce=False)
         values=self.values
         t1 = time.time()
         for i in range(batch_size):
@@ -712,7 +860,7 @@ class all_information:
             tax = self.plot(True,True,True,show=False,compute_theta=False,tax=tax)
             figure, tax = ternary.figure(ax = axn[1][2], scale = 100)
             tax=self.plot_theta_score(tax,compute=False,points=[0])
-            plt.savefig('test.eps',dpi=800)
+            plt.savefig('../data/evaluation_opt/3d/process/test.eps',dpi=800)
             plt.clf()
         if plot:
             self.set_labels(method='1_batch',batch_size=batch_size)
@@ -725,13 +873,19 @@ class all_information:
         print('Time fin', t6-t5)
         return self.distance_to_optimal_f()
 
-    def f_score(self,f,frac=0.9,method='sorted_score_at_frac'):
-        sorted_f=np.sort(f)
+    def f_score(self,fs,frac=0.9,method='sorted_score_at_frac'):
         if method == 'sorted_score_at_frac':
-            index=int(round(len(f)*frac))
+            sorted_f=np.sort(fs)
+            index=int(round(len(fs)*frac))
             result = sorted_f[index]
         if method == 'skewness':
+            sorted_f=np.sort(fs)
             result = scipy.stats.skew(sorted_f)
+        if method == 'variance':
+            mean=self.get_mean(fs)
+            variance=np.sum(fs*np.linalg.norm(mean-self.omega))
+            normalisation=np.sum(fs)
+            result = variance/normalisation
         return result
 
     def f_score_test(self,n=10000,dim=3,num_points=50,theta_range=30,
@@ -793,7 +947,7 @@ class all_information:
     def plot_theta_score(self, tax, show=False ,compute=True,
                          points=None,point_labels=None,point_colors=None):
         if compute:
-            self.prod_theta_score_n(return_type='with_index')
+            self.prod_theta_score_n(dim=3,return_type='with_index',increment=1)
         f=self.values[:,0]
         f = f/np.sum(f)
         data = dict(zip(self.plotting_indicis,f))
@@ -803,10 +957,10 @@ class all_information:
         else:
             if point_labels is None:
                 sorted_values = self.values[self.values[:,0].argsort()]
-                points=np.array([[self.goal],[self.omega[int(sorted_values[-1][1])]]])
+                points=np.array([[self.goal],[self.omega[int(sorted_values[-1][1])]],[self.get_mean()]])
                 for i in points:
                     print(i)
-                point_labels=['Target point','max(F)']
+                point_labels=['Target point','max(F)','mean(F)']
             for i in range(len(point_labels)):
                 tax.scatter(points[i],
                         marker='x',s=50,linewidth = 1.,
@@ -834,14 +988,14 @@ class all_information:
     def get_random_vec(self,x,length):
         #returns a random vector of length l constrained to the plane spanned
         #by x
-        dim = x.shape[1]
+        dof = x.shape[0]
         v_rand=[]
-        if dim == 4:
-            c0 = round(np.random.uniform(0,1),15)
-            c1 = round(np.random.uniform(0,1),15)
+        if dof == 2:
+            c0 = round(np.random.uniform(-1,1),15)
+            c1 = round(np.random.uniform(-1,1),15)
             v_rand = c0*x[0] + c1*x[1]
             v_rand = length*v_rand/np.linalg.norm(v_rand)
-        elif dim==3:
+        elif dof==1:
             v_rand = length*x[0]/np.linalg.norm(x[0])
         else:
             print('Error: function doesnt handle dimension ', dim)
@@ -856,24 +1010,52 @@ class all_information:
         line = self.goal - self.points[point_index]
         line = line/np.linalg.norm(line)
         self.lines = np.append(self.lines,np.array([line]),axis=0)
-        self.end_points = np.append(self.end_points,np.array([self.points[point_index]+line]),axis=0)
+        self.end_points = np.append(self.end_points,
+                                    np.array([self.points[point_index]+line]),axis=0)
+        return
 
     def create_line_from_point_nd(self,dim,point_index,theta_range,
                               theta_distribution):
-        #creates a line from a point using a method scalable to n dimensions
         v_perp = np.full((dim),1)
         true_line = self.goal - self.points[point_index]
         true_line_norm = true_line/np.linalg.norm(true_line)
+        #creates a line from a point using a method scalable to n dimensions
         x=np.empty((dim-2,dim))
         A = np.stack((v_perp,true_line_norm),axis=1)
         for i in range(dim-2):
             x[i] = self.find_orthonormal(A)
             A = np.hstack((A,np.array([x[i]]).T))
+        print(A)
         theta = self.random_angle(theta_range,theta_distribution)
         v_rand = self.get_random_vec(x,np.tan(theta))
         estimated_line = (true_line_norm+v_rand)/np.linalg.norm(true_line_norm+v_rand)
         self.lines = np.append(self.lines,np.array([estimated_line]),axis=0)
         self.end_points = np.append(self.end_points,np.array([self.points[point_index]+estimated_line]),axis=0)
+
+    def create_line_from_sample(self,dim,point_index):
+        v_perp = np.full((dim),1)
+        true_line = self.goal - self.points[point_index]
+        true_line_norm = true_line/np.linalg.norm(true_line)
+        #creates a line from a point using a method scalable to n dimensions
+        x=np.empty((dim-2,dim))
+        A = np.stack((v_perp,true_line_norm),axis=1)
+        for i in range(dim-2):
+            x[i] = self.find_orthonormal(A)
+            A = np.hstack((A,np.array([x[i]]).T))
+        ep=error_propagator(dim)
+        ep.initialise('b',self.goal,self.points[0])
+        vs = np.empty((x.shape[0],x.shape[1]))
+        for n,i in enumerate(x):
+            std=ep.get_std(i)
+            scale=np.random.normal(loc=0,scale=std)
+            vs=np.append(vs,np.array([scale*x[n]]),axis=0)
+        estimated_line=true_line_norm
+        for i in vs:
+            estimated_line=estimated_line+i
+        self.lines = np.append(self.lines,np.array([estimated_line]),axis=0)
+        self.end_points=np.append(self.end_points,np.array([self.points[point_index]+100*estimated_line]),axis=0)
+
+
 
     def create_n_lines_from_domain(self,dim,domain,theta_range,theta_distribution):
         #Todo what?
@@ -893,16 +1075,914 @@ class all_information:
             x3 = round(np.random.uniform(0,100-x1-x2),10)
             x4 = float(100 - x1 - x2 -x3)
             point = [x1,x2,x3,x4]
+        if dim == 5:
+            x1 = round(np.random.uniform(0,100),10)
+            x2 = round(np.random.uniform(0,100-x1),10)
+            x3 = round(np.random.uniform(0,100-x1-x2),10)
+            x4 = round(np.random.uniform(0,100-x1-x2-x3),10)
+            x5 = float(100-x1-x2-x3-x4)
+            point = [x1,x2,x3,x4,x5]
         random.shuffle(point)
         return np.array(point)
 
     def add_random_initial(self,dim):
         self.points = np.array([self.random_point(dim)])
 
+    def add_initial(self,dim=3,p=[[30,20,50]]):
+        self.points = p
+
     def add_random_goal(self,dim):
         self.goal = self.random_point(dim)
 
-'''
+    def add_goal(self,goal,dim=3):
+        self.goal = goal
+
+    def get_mean(self,f=None,omega=None):
+        if omega is None:
+            omega=self.omega
+        if f is None:
+            f=self.values[:,0]
+        normalisation = np.sum(f)
+        u=np.swapaxes(np.broadcast_to(f,(omega.shape[1],len(f))),0,1)*omega
+        mean=np.sum(u,axis=0)
+        mean = mean/normalisation
+        return mean
+
+    def set_charge_constraint_normal(self, normal):
+        self.charge_normal = normal
+
+    def charge_constraint_test(self,dim,normal_vectors,cube_size,contained_point,theta_range,theta_distribution,batch_size):
+        self.usual_setup_constrained(dim,normal_vectors,cube_size,contained_point,theta_range,theta_distribution,batch_size)
+
+    def create_omega_constrained(self, normal_vectors, cube_size,
+                                 contained_point, create_heatmap=False):
+        dim=normal_vectors.shape[1]
+        plane_dim = dim-len(normal_vectors)
+        max_length = np.sqrt(dim*cube_size**2)
+        max_co = math.floor(max_length)
+        normal_a = normal_vectors[0]
+        normal_b = normal_vectors[1]
+        x=np.empty((plane_dim,dim))
+        A = np.stack((normal_a,normal_b),axis=1)
+        for i in range(plane_dim):
+            x[i] = self.find_orthonormal(A)
+            A = np.hstack((A,np.array([x[i]]).T))
+        ii = np.array(range(-max_co,max_co+1,1))
+        if plane_dim == 3:
+            all_combinations=cartesian((ii,ii,ii))
+        elif plane_dim ==2:
+            all_combinations=cartesian((ii,ii))
+        all_combinations_s=np.einsum('...i,ij->...j',all_combinations,x)
+        all_combinations_s=all_combinations_s+contained_point
+        omega=np.delete(all_combinations,np.where(np.any(
+            (all_combinations_s>cube_size)|(all_combinations_s<0),
+            axis=1)),axis=0)
+        if plane_dim==2 and create_heatmap:
+            jmin=np.amin(omega[:,1])
+            jmax=np.amax(omega[:,1])
+            imin=np.amin(omega[:,0])
+            imax=np.amax(omega[:,0])
+            self.heatmap=np.zeros((jmax-jmin+1,imax-imin+1))
+            self.xlim=[imin,imax]
+            self.ylim=[jmin,jmax]
+        #print("Number of grid points = ",omega.shape)
+        self.omega=omega
+        self.basis=x
+        self.max_co=max_co
+        self.constrained_dim=plane_dim
+
+    def random_point_constrained(self,n=1):
+        choice = random.randrange(len(self.omega))
+        indicis = range(len(self.omega))
+        r_indicis = np.random.choice(indicis,n,replace=False)
+        return self.omega[r_indicis]
+
+    def add_random_initial_constrained(self):
+        self.points=self.random_point_constrained()
+
+    def add_random_goal_constrained(self):
+        self.goal=self.random_point_constrained()[0]
+
+    def usual_setup_constrained(self,dim,normal_vectors,cube_size,contained_point,theta_range,theta_distribution,batch_size):
+        self.create_omega_constrained(normal_vectors,cube_size,contained_point)
+        dim_constrained = dim - len(normal_vectors)
+        self.add_random_initial_constrained()
+        for i in range(batch_size-1):
+            self.points=np.append(self.points,self.random_point_constrained(),axis=0)
+        self.add_random_goal_constrained()
+        self.lines = np.empty((0,dim_constrained))
+        self.end_points = np.empty((0,dim_constrained))
+        for i in range(batch_size):
+            self.create_line_from_point_nd_constrained(dim_constrained,i,theta_range,theta_distribution)
+        self.prod_theta_score_n_constrained(return_type='with_index')
+
+    def create_line_from_point_nd_constrained(self,dim,point_index,theta_range,
+                              theta_distribution):
+        true_line = self.goal - self.points[point_index]
+        true_line_norm = true_line/np.linalg.norm(true_line)
+        x=np.empty((dim-1,dim))
+        A = np.transpose(np.array([true_line_norm]))
+        for i in range(dim-1):
+            x[i] = self.find_orthonormal(A)
+            A = np.hstack((A,np.array([x[i]]).T))
+        theta = self.random_angle(theta_range,theta_distribution)
+        v_rand = self.get_random_vec(x,np.tan(theta))
+        estimated_line = (true_line_norm+v_rand)/np.linalg.norm(true_line_norm+v_rand)
+        estimated_line_star=np.matmul(np.transpose(self.basis),estimated_line)
+        print('0 check',np.sum(estimated_line_star),np.sum(estimated_line_star*[1,2,-2,-1,-1]))
+        self.lines = np.append(self.lines,np.array([estimated_line]),axis=0)
+        self.end_points = np.append(self.end_points,np.array([self.points[point_index]+estimated_line]),axis=0)
+
+    def create_line_from_sample_constrained(self,dim,point_index,
+                                        method='default',sigma=None,length=1):
+        #function to generate a normalised random line for the sample specified by point
+        #index. line points towards goal with wobble specified by sigma
+        #appends line to self.lines and point+line to self.end_points
+        true_line = self.goal - self.points[point_index]
+        true_line_norm = true_line/np.linalg.norm(true_line)
+        x=np.empty((dim-1,dim))
+        A = np.transpose(np.array([true_line_norm]))
+        for i in range(dim-1):
+            x[i] = self.find_orthonormal(A)
+            A = np.hstack((A,np.array([x[i]]).T))
+        if method == 'default':
+            sigma=self.simulate_sample(method=method)
+        stds = np.empty((len(x)))
+        for i in range(len(x)):
+            stds[i] = np.einsum('k,kl,l',x[i],sigma,x[i])
+        perp_vec=np.zeros((dim))
+        for i in range(len(x)):
+            c = np.random.normal(loc=0,scale=stds[i])
+            perp_vec=perp_vec+c*x[i]
+        estimated_line=perp_vec+true_line_norm
+        estimated_line_norm=estimated_line/np.linalg.norm(estimated_line)
+        self.lines = np.append(self.lines,np.array([estimated_line]),axis=0)
+        self.end_points=np.append(self.end_points,np.array([self.points[point_index]+length*estimated_line]),axis=0)
+
+    def create_plot_lines(self):
+        self.plot2d_lines=np.empty((len(self.lines),2,2))
+        if len(self.end_points)==len(self.points):
+            for i in range(len(self.lines)):
+                print(self.lines[i],', norm: ',np.linalg.norm(self.lines[i]))
+                self.plot2d_lines[i]=[self.points[i],self.end_points[i]]
+
+
+        '''
+
+        ep.initialise('a',goal_standard[0][0],sample_standard[0][0])
+        x_standard=self.convert_to_standard_basis(use_omega=False,omega=x)
+        vs = np.empty((x.shape[0],x.shape[1]))
+        for n,i in enumerate(x_standard):
+            std=ep.get_std(i[0])
+            scale=np.random.normal(loc=0,scale=std)
+            vs=np.append(vs,np.array([scale*x[n]]),axis=0)
+        estimated_line=true_line_norm
+        for i in vs:
+            estimated_line=estimated_line+i
+        self.lines = np.append(self.lines,np.array([estimated_line]),axis=0)
+        self.end_points = np.append(self.end_points,np.array([self.points[point_index]+estimated_line]),axis=0)
+        #Todo add test to get average angle between true and estimated line and
+        #check against what it should be
+        '''
+
+    def prod_theta_score_n_constrained(self,k=np.pi,dim=4,return_type=None,timed=False,a=None,b=None,reduce=False):
+        #Optimise so that End points MUST be 1 away from start points
+        #block 1
+        dim = self.omega.shape[1]
+        if a is None:
+            a = self.points
+            b = self.end_points
+        #to do constrained reduce
+        '''
+        if reduce:
+            self.omega = self.reduce_omega(self.omega,0,len(a),0.5,45)
+        '''
+        omega=self.omega
+        mesh_size = len(omega)
+        m = len(b) #number of lines
+        #block 2
+        t1 = time.time()
+        #broadcast a to repeated mesh_size times in its middle direction
+        #(start point has no dependance on x)
+        a_broad = np.broadcast_to(a,(mesh_size,m,dim))
+        a_broad_t = np.swapaxes(a_broad,0,1)
+        #broadcast omega to be repeated m times on axis 0,
+        # (need 1 'omega' for every line
+        omega_broad = np.broadcast_to(omega,(m,mesh_size,dim))
+        #get the distance between a and x for every x
+        a_omega = omega_broad-a_broad_t
+        a_omega_norm = np.linalg.norm(a_omega,axis=2)
+        #normalise so that 2-norm of axis 2 is 1
+        #a_omega_normed = a_omega/np.moveaxis(
+        #    np.broadcast_to(np.linalg.norm(a_omega,axis=2),(dim,m,mesh_size)),0,2)
+        #get the vector from a to b (already contatined in self.lines????
+        ab=np.subtract(b,a)
+        #normalise
+        ab_norm = np.linalg.norm(ab,axis=1)
+        ab_norm_t = np.swapaxes(np.broadcast_to(ab_norm,(dim,m)),0,1)
+        ab_normed = ab/ab_norm_t
+        #broadcast to m by mesh_size by dim
+        ab_normed_broad = np.swapaxes(np.broadcast_to(ab_normed,(mesh_size,m,dim)),0,1)
+        dot=np.ones((m,mesh_size))
+        np.divide((ab_normed_broad*a_omega).sum(axis=2),
+                        a_omega_norm,out=dot,where=a_omega_norm!=0)
+        dot = np.clip(dot,-1,1)
+        theta = np.arccos(dot)
+        theta_p = np.exp(-1*theta/k)
+        #get the mesh_size long vector representing value for each point in omega
+        #by taking product of lines for each x in omega
+        theta_p=theta_p/np.swapaxes(np.broadcast_to(np.sum(theta_p,axis=1),(mesh_size,m)),0,1)
+        values = np.prod(theta_p,axis=0)
+        #normalise
+        #values=values/np.sum(values)
+        if return_type == 'with_index':
+            index=np.arange(0,len(values),step=1,dtype='int_')
+            values_index = np.stack((values,index),axis=1)
+            self.values = values_index
+            print(self.values.shape,'hey')
+        elif return_type == 'to_include':
+            return values
+        else:
+            self.values = values
+        #block 3
+        t2 = time.time()
+        if timed:
+            print('Block 2: ', t2-t1)
+
+    def convert_to_standard_basis(self,use_omega=True,omega=None):
+        A=self.basis
+        if use_omega:
+            omega=self.omega
+        p_standard=self.contained_point+np.einsum('ji,...j->...i',A,omega)
+        if use_omega:
+            self.omega_standard=p_standard
+        else:
+            return p_standard
+
+    def plot_jon_test(self,points=None):
+        label=['0,1,2,3,4,5,6,7,8,9']
+        if points is None:
+            plotter=Plotter(5)
+            plotter.create_fig()
+            plotter.add_points(self.omega_standard)
+            plotter.plot_points()
+ 
+    def simulate_pawley(self,b=5):
+        x=self.random_point_constrained(n=6)
+        self.goal=x[0]
+        x=x[1:]
+        ds=np.empty((len(x)))
+        for n,i in enumerate(x):
+            ds[n] = np.linalg.norm(self.goal-i)
+        x_sorted=x[np.argsort(ds)]
+        for i in x_sorted:
+            print(i,np.linalg.norm(self.goal-i))
+        self.points=x_sorted
+        self.pawley_closer=[0,2]
+        self.pawley_further=[2,5]
+    
+    def set_pawley_rank(self,pawley_rank=None):
+        if pawley_rank is None:
+            pawley_rank=[[[2,1,1,2,1],[2,1,1,3,0]],
+                         [[2,1,1,1.5,1.5]],
+                         [[2,1,1,1,2],[2,1,1,0,3]]]
+        pawley_rank_normal=[0]*len(pawley_rank)
+        for n,i in enumerate(pawley_rank):
+            rankeq = [0]*len(i)
+            for m,j in enumerate(i):
+                point = np.array(j)
+                if np.dot(self.normal_vectors[0],point)!=0:
+                    print('Error, given points do not obey constraints')
+                else:
+                    point=point/np.sum(point)
+                    point=np.einsum('ij,j',self.basis,point)
+                    rankeq[m]=point
+            pawley_rank_normal[n]=rankeq
+        self.pawley_rank = pawley_rank_normal
+
+    def set_pawley_rank_s(self,pawley_rank):
+        pawley_rank_normal=[0]*len(pawley_rank)
+        for n,i in enumerate(pawley_rank):
+            rankeq = [0]*len(i)
+            for m,j in enumerate(i):
+                point = np.array(j)
+                point=point/np.sum(point)
+                rankeq[m]=point
+            pawley_rank_normal[n]=rankeq
+        self.pawley_rank = pawley_rank_normal
+
+    def incorporate_pawley(self,kind='closer_further',plot=True):
+        thrown=np.empty((0),dtype=int)
+        self.convert_to_standard_basis()
+        omega=self.omega_standard[:,0,:]
+        self.reduced_omega=omega
+        d=self.reduced_omega.shape[1]
+        if kind == 'closer_further':
+            print('Error, function probably wrong')
+            closer=self.points[self.pawley_closer[0]:self.pawley_closer[1]]
+            further=self.points[self.pawley_further[0]:self.pawley_further[1]]
+            for i in closer:
+                for j in further:
+                    a=np.broadcast_to(i,(len(self.reduced_omega),d))
+                    ax=a-self.reduced_omega
+                    da=np.linalg.norm(ax,axis=1)
+                    b=np.broadcast_to(j,(len(self.reduced_omega),d))
+                    bx=b-self.reduced_omega
+                    db=np.linalg.norm(bx,axis=1)
+                    diff = da-db
+                    thrown=np.append(thrown,np.where(diff>0)[0])
+        if kind == 'arbitrary_rank':
+            if len(self.pawley_rank)<2:
+                print('Error, need at least 2 pawley ranks')
+            else:
+                for rank,closer in enumerate(self.pawley_rank):
+                    if rank+1<len(self.pawley_rank): 
+                        for further in self.pawley_rank[rank+1:]:
+                            for i in closer:
+                                for j in further:
+                                    a=np.broadcast_to(i,(len(self.reduced_omega),d))
+                                    ax=a-self.reduced_omega
+                                    da=np.linalg.norm(ax,axis=1)
+                                    b=np.broadcast_to(j,(len(self.reduced_omega),d))
+                                    bx=b-self.reduced_omega
+                                    db=np.linalg.norm(bx,axis=1)
+                                    diff = da-db
+                                    thrown=np.append(thrown,np.where(diff>0)[0])
+        thrown=np.unique(thrown)
+        indicis=np.arange(0,len(self.omega),1)
+        kept=np.where(np.isin(indicis,thrown,invert=True)==True)
+        self.reduced_omega=omega[kept]
+        self.thrown_omega=omega[thrown]
+        print('kept points: ',self.reduced_omega.shape[0])
+        if plot:
+            self.plot_pawley_closer()
+
+    def get_uniform_from_pawley(self,method='7',plot=True):
+        reduced_omega_projected=np.empty((len(self.reduced_omega),3))
+        print(self.basis.shape)
+        print(self.reduced_omega.shape)
+        reduced_omega=self.reduced_omega
+        for n,i in enumerate(reduced_omega):
+            reduced_omega_projected[n]=np.matmul(self.basis,i)
+        points_standard=np.empty((10,5))
+        if method == 'reduced_omega':
+            points_standard=reduced_omega
+        if method == 'broken':
+            print(reduced_omega_projected.shape)
+            imax=-999
+            imin=999
+            jmax=-999
+            jmin=999
+            kmax=-999
+            kmin=999
+            for point in reduced_omega_projected:
+                if point[0] > imax:
+                    imax=point[0]
+                if point[0] < imin:
+                    imin=point[0]
+                if point[1] > jmax:
+                    jmax=point[1]
+                if point[1] < jmin:
+                    jmin=point[1]
+                if point[2] > kmax:
+                    kmax=point[2]
+                if point[2] < kmin:
+                    kmin=point[2]
+            print(imin,imax,jmin,jmax,kmin,kmax) 
+            iplus=mean+np.array([(imax+imin)/4,0,0])
+            iminus=mean-np.array([(imax+imin)/4,0,0])
+            jplus=mean+np.array([0,(jmax+jmin)/4,0])
+            jminus=mean-np.array([0,(jmax+jmin)/4,0])
+            kplus=mean+np.array([0,0,(kmax+kmin)/4])
+            kminus=mean-np.array([0,0,(kmax+kmin)/4])
+            points=np.array([iplus,iminus,jplus,jminus,kplus,kminus,mean])
+            print(points.shape,'nnn')
+        if method == 'hmmm':
+            imax=-999
+            imin=999
+            jmax=-999
+            jmin=999
+            kmax=-999
+            kmin=999
+            lmax=-999
+            lmin=999
+            mmax=-999
+            mmin=999
+            for n,point in enumerate(reduced_omega):
+                if point[0] > imax:
+                    imax=point[0]
+                    points_standard[0]=point
+                if point[0] < imin:
+                    imin=point[0]
+                    points_standard[1]=point
+                if point[1] > jmax:
+                    jmax=point[1]
+                    points_standard[2]=point
+                if point[1] < jmin:
+                    jmin=point[1]
+                    points_standard[3]=point
+                if point[2] > kmax:
+                    kmax=point[2]
+                    points_standard[4]=point
+                if point[2] < kmin:
+                    kmin=point[2]
+                    points_standard[5]=point
+                if point[3] > lmax:
+                    lmax=point[3]
+                    points_standard[6]=point
+                if point[3] < lmin:
+                    lmin=point[3]
+                    points_standard[7]=point
+                if point[4] > mmax:
+                    mmax=point[4]
+                    points_standard[8]=point
+                if point[4] < mmin:
+                    mmin=point[4]
+                    points_standard[9]=point
+            #mean=np.array([(imax+imin)/2,(jmax+jmin)/2,(kmax+kmin)/2,
+                          ##lmax+lmin)/2,(mmax+mmin)/2])
+            mean=np.mean(reduced_omega,axis=0)
+            points_standard[9]=mean
+        if plot == True:
+            print(points_standard.shape)
+            plotter=Plotter(5)
+            plotter.create_fig()
+            plotter.set_projection(0,0)
+            label=['0,1,2,3,4,5,6,7,8,9']
+            plotter.add_points(points_standard)
+            plotter.plot_points(c='green',s=1)
+        return points_standard
+
+    def plot_pawley_closer(self,thrown=False):
+            plotter=Plotter(5)
+            plotter.create_fig()
+            plotter.set_projection(0,180)
+            if thrown:
+                plotter.add_points(self.thrown_omega)
+                plotter.plot_points(show=False,c='red',s=1)
+            plotter.add_points(self.reduced_omega)
+            plotter.plot_points(c='green',s=1)
+
+    def plot_points_jon(self,pawley_rank=False,points=None):
+        plotter=Plotter(5)
+        plotter.create_fig()
+        if points is not None:
+            cmap = get_cmap(len(points)+1)
+            for label,point in enumerate(points):
+                plotter.add_points([point])
+                plotter.plot_points(color=cmap(label),marker='x',s=5,show=False,label=label)
+        if pawley_rank:
+            self.plot_pawley_ranking(plotter=plotter)
+
+
+    def plot_pawley_test(self):
+            closer=self.points[self.pawley_closer[0]:self.pawley_closer[1]]
+            further=self.points[self.pawley_further[0]:self.pawley_further[1]]
+            print('aa')
+            print(closer)
+            print(further)
+            closer_standard=self.convert_to_standard_basis(use_omega=False,omega=closer)
+            further_standard=self.convert_to_standard_basis(use_omega=False,omega=further)
+            goal_standard=self.convert_to_standard_basis(use_omega=False,omega=np.array([self.goal]))
+            plotter=Plotter(5)
+            plotter.create_fig()
+            plotter.add_points(closer_standard)
+            plotter.plot_points(show=False,c='green')
+            plotter.add_points(goal_standard)
+            plotter.plot_points(show=False,c='blue')
+            plotter.add_points(further_standard)
+            plotter.plot_points(c='red')
+            self.incorporate_pawley()
+
+    def plot_pawley_ranking(self,plotter=None):
+        show=False
+        if plotter is None:
+            plotter=Plotter(5)
+            plotter.create_fig()
+        plotter.show_labels()
+        cmap = get_cmap(len(self.pawley_rank)+1)
+        for rank,i in enumerate(self.pawley_rank):
+            if rank == len(self.pawley_rank)-1:
+                show = True
+            points=np.array(i)
+            plotter.add_points(points)
+            plotter.plot_points(show=show,label='Rank: ' +
+                                str(rank),color=cmap(rank),s=1)
+
+    def create_line_from_sample_test(self,normal_vectors,cube_size,
+                                 contained_point,sigma=None):
+        dim=4
+        self.create_omega_constrained(normal_vectors,cube_size,contained_point)
+        dim_constrained = dim - len(normal_vectors)
+        self.add_random_initial_constrained()
+        self.add_random_goal_constrained()
+        self.lines = np.empty((0,dim_constrained))
+        self.end_points = np.empty((0,dim_constrained))
+        self.create_line_from_sample_constrained(dim_constrained,0,method='use_sigma',sigma=sigma)
+        for i in range(500):
+            self.add_point([self.points[0]])
+            self.create_line_from_sample_constrained(dim_constrained,i+1,method='use_sigma',sigma=sigma)
+        plotter=visualise_square(self.basis[0],self.basis[1])
+        self.create_plot_lines()
+        plotter.test_fig(self.plot2d_lines,self.points[0])
+
+
+    def create_line_from_sample_test_uncon(self,dim=3):
+        self.add_initial(dim=dim,p=np.array([[33,33,34]]))
+        for i in range(1000):
+            self.add_point(np.array([[33,33,34]]))
+        self.add_goal(np.array([20,20,60]))
+        self.lines = np.empty((0,dim))
+        self.end_points = np.empty((0,dim))
+        for i in range(101):
+            self.create_line_from_sample(dim,i)
+        self.set_labels(method='custom_figure')
+        self.plot(True,True,True)
+        N=50
+        z=0.3
+        u0=self.goal-self.points[0]
+        u0=self.goal/np.linalg.norm(u0)
+        mean=self.points[0]+z*u0
+        sigma=np.array([[0.1,0,0],
+                        [0,1,0],
+                        [0,0,1]])
+        X = np.linspace(-3, 3, N)
+        Y = np.linspace(-3, 3, N)
+        X, Y = np.meshgrid(X, Y)
+        pos=np.empty(X.shape+(2,))
+        pos[:,:,0]=X
+        pos[:,:,1]=Y
+        print('aaa',pos.shape)
+        omega=self.create_omega(dim=3,increment=1)
+        print(omega.shape)
+        n = 3
+        Sigma_det = np.linalg.det(sigma)
+        Sigma_inv = np.linalg.inv(sigma)
+        N = np.sqrt((2*np.pi)**n * Sigma_det)
+        # This einsum call calculates (x-mu)T.Sigma-1.(x-mu) in a vectorized
+        # way across all the input variables.
+        fac = np.einsum('...k,kl,...l->...', pos-mean, Sigma_inv,
+                        pos-mean)
+
+        Z = np.exp(-fac / 2) / N
+        #plot that fuzzy ball bro
+
+    def plot_square_test(self):
+        wt_convert = wt_converter()
+        error_propagate = error_propagator(dim=4)
+        plotter=visualise_square(self.basis[0],self.basis[1])
+#        plotter.plot_omega(self.omega)
+        #formula_a="Cs 1 Bi 1 Se 1 I 2"
+        formula_a="Cs 1 Bi 1 Se 0 I 4"
+        formula_b="Cs 2 Bi 1 Se 2 I 1"
+        formula_c="Cs 1 Bi 2 Se 2 I 3"
+        formulas=[formula_a,formula_b,formula_c]
+        weights=[0.2,0.2,0.6]
+        #get the moles and standard deviation from wt%
+        moles,moles_error,formulas_standard=wt_convert.wt_to_moles(formulas,
+                                                                   weights)
+        error_propagate.set_moles_error(moles,formulas_standard,moles_error)
+        merged_ball=error_propagate.get_merged_balls_p(self.basis)
+        #plotter.plot_ball(merged_ball)
+
+        small_balls=error_propagate.get_small_balls_p(self.basis)
+        plotter.draw_ball_fig(merged_ball,small_balls,self.omega,self.cube_size)
+
+    def gaussian_score(self):
+        omega=self.omega
+        self.values=np.array([1]*len(omega))
+
+    def make_heatmap_constrained(self):
+        for point,value in zip(self.omega,self.values):
+            i=point[0]-self.xlim[0]
+            j=point[1]-self.ylim[0]
+            self.heatmap[j,i]=value
+
+    def heatmap_test(
+        self,normal_vectors,cube_size,contained_point,sigma,method='p'):
+        dim_constrained=normal_vectors.shape[1]-normal_vectors.shape[0]
+        self.create_omega_constrained(normal_vectors,cube_size,
+                                      contained_point,create_heatmap=True)
+        self.add_random_initial_constrained()
+        #self.add_point(np.array(self.random_point_constrained()))
+        #self.add_point(np.array(self.random_point_constrained()))
+        self.add_random_goal_constrained()
+        self.lines = np.empty((0,dim_constrained))
+        self.end_points = np.empty((0,dim_constrained))
+        self.create_line_from_sample_constrained(dim_constrained,0,method='use_sigma',sigma=sigma,length=40)
+        #self.create_line_from_sample_constrained(dim_constrained,1,method='use_sigma',sigma=sigma,
+        #                                        length=40)
+        #self.create_line_from_sample_constrained(dim_constrained,2,method='use_sigma',sigma=sigma,length=40)
+        if method == 'p':
+            basises=np.empty((self.lines.shape[0],self.lines.shape[1],self.lines.shape[1]))
+            for i in range(len(self.lines)):
+                basises[i]=self.get_basis(self.points[i],self.lines[i])
+            self.set_sigma_simulated(sigma,1)
+            stdses=self.get_stdses(basises)
+            self.create_p(self.omega,basises,self.points,stdses,save_reduced=True)
+            mean=self.get_mean(self.values_reduced,self.omega_reduced)
+        elif method == 'angle':
+            self.prod_theta_score_n_constrained(return_type='normal')
+            mean=self.get_mean(self.values,self.omega)
+
+        #self.gaussian_score()
+        self.make_heatmap_constrained()
+        plotter=visualise_square(self.basis[0],self.basis[1])
+        #plotter.plot_heatmap(self.heatmap,self.xlim,self.ylim)
+        self.create_plot_lines()
+        #plotter.test_fig(self.plot2d_lines,self.points[0])
+        #goal=self.convert_to_standard_basis(use_omega=False,omega=np.array([self.goal]))[0]
+        #print(goal.shape)
+        plotter.test_fig(self.goal,self.points,self.plot2d_lines,self.heatmap,self.xlim,self.ylim,self.omega,mean)
+
+    def make_p_gaussian(self,sigma,scale,delta):
+        basises=np.empty((self.lines.shape[0],self.lines.shape[1],self.lines.shape[1]))
+        for i in range(len(self.lines)):
+            basises[i]=self.get_basis(self.points[i],self.lines[i])
+        self.set_sigma_simulated(sigma,scale)
+        stdses=self.get_stdses(basises)
+        self.create_p(self.omega,basises,self.points,stdses,delta=delta)
+        
+    def get_stdses(self,basises):
+        #function to compute the standard deviation in each of the directions
+        #in self.basis (but not the the first one) and store as a n,dim-3
+        stdses=np.empty((basises.shape[0],basises.shape[1]-1))
+        for n,basis in enumerate(basises):
+            for m,i in enumerate(basis[1:]):
+                stdses[n][m]=np.einsum('i,ij,j',i,self.sigmas[n],i)
+        return stdses
+
+
+    def get_basis(self, sample, estimated_direction):
+        dim = len(estimated_direction)
+        #function to caluclate basis for each sample
+        #basis: numpy (dim,dim) array such such that
+        # basis matmul (a point) gives the point in
+        # representation where first element is size in estimated_direction and
+        # subsequent elements are sizes in orthogonal directions
+        x=np.empty((dim-1,dim))
+        A = np.transpose(np.array([estimated_direction]))
+        for i in range(dim-1):
+            x[i] = self.find_orthonormal(A)
+            A = np.hstack((A,np.array([x[i]]).T))
+        return A.T
+
+    def set_sigma_simulated(self,sigma,scale=1):
+        self.sigmas=np.zeros((len(self.points),self.points.shape[1],self.points.shape[1]))+sigma/scale
+
+    def create_p(self,omega,basises,samples,stdses,
+                 delta=1,save_reduced=False,addition=False):
+        #function to calculate P for every point in omega
+        #omega: numpy (o,dim) array for every point
+        #basises: numpy (n,dim,dim) array for n samples such that
+        # the matrix (i,dim,dim) matmul (a point) gives the point in
+        # representation where first element is size in perp direction and
+        # subsequent elements are sizes in orthogonal directions
+        #samples: numpy (n,dim) array giving location of each sample
+        #stdss: numpy (n,dim-1) array giving std of each sample in its
+        # orthogonal directions
+        #Indexes:
+            #o-omega
+            #n-sample
+            #dim dimensions
+        o = len(omega)
+        n = len(samples)
+        m = stdses.shape[1]
+        dim=self.points.shape[1]
+
+        #reduce omega to only consider points which are in forward orthogonal
+        #direction9
+        omega_broad=np.swapaxes(np.broadcast_to(omega,(n,o,dim)),0,1)
+        samples_broad=np.broadcast_to(samples,(o,n,dim))
+        ax=omega_broad-samples_broad
+        orth_direction_broad=np.broadcast_to(basises[:,0,:],(o,n,dim))
+        ax_perp=np.sum(ax*orth_direction_broad,axis=2)
+        selected_indexes=np.all(ax_perp >0 ,axis=1)
+        ax_perp_reduced=ax_perp[selected_indexes]
+        ax_reduced=ax[selected_indexes]
+        o=len(ax_reduced)
+
+        #project points
+        ax_perp_broad=np.moveaxis(np.broadcast_to(ax_perp_reduced,(dim,o,n)),0,2)
+        ax_proj=np.zeros((o,n,dim))
+        np.divide(ax_reduced,ax_perp_broad,where=ax_perp_broad!=0,out=ax_proj)
+        parallel_directions=basises[:,1:]
+        ax_parallel=np.einsum('...id,ikd->...ik',ax_proj,parallel_directions)
+
+        #scale sigmas
+        scaled_std=np.einsum('...i,k...->k...i',stdses,ax_perp_reduced)
+
+        lower = ax_parallel-delta
+        CDF_lower=scipy.stats.norm(loc=0,scale=scaled_std).cdf(lower)
+        upper = ax_parallel+delta
+        CDF_upper=scipy.stats.norm(loc=0,scale=scaled_std).cdf(upper)
+        p_reduced=CDF_upper-CDF_lower
+        normalisation=np.sum(p_reduced,axis=0)
+        p_reduced=p_reduced/np.broadcast_to(normalisation,p_reduced.shape)
+        p_reduced=np.prod(p_reduced,axis=2)
+        p_reduced=np.prod(p_reduced,axis=1)
+        p=np.zeros((len(omega)))
+        p[selected_indexes]=p_reduced
+        if not addition:
+            self.values=p
+            if save_reduced:
+                self.omega_reduced=self.omega[selected_indexes]
+                self.values_reduced=p_reduced
+        else:
+            self.values=self.values*p
+
+
+
+    def berny_test(
+            self,normal_vectors,cube_size,contained_point,sigma,method='p'):
+        self.contained_point=contained_point
+        self.normal_vectors=normal_vectors
+        dim_constrained=normal_vectors.shape[1]-normal_vectors.shape[0]
+        self.create_omega_constrained(normal_vectors,cube_size,
+                                      contained_point,create_heatmap=True)
+        self.add_random_initial_constrained()
+        self.add_point(np.array(self.random_point_constrained()))
+        self.add_point(np.array(self.random_point_constrained()))
+        self.add_random_goal_constrained()
+        self.lines = np.empty((0,dim_constrained))
+        self.end_points = np.empty((0,dim_constrained))
+        self.create_line_from_sample_constrained(dim_constrained,0,method='use_sigma',sigma=sigma,length=40)
+        self.create_line_from_sample_constrained(dim_constrained,1,method='use_sigma',sigma=sigma,length=40)
+        self.create_line_from_sample_constrained(dim_constrained,2,method='use_sigma',sigma=sigma,length=40)
+        if method=='p':
+            basises=np.empty((self.lines.shape[0],self.lines.shape[1],self.lines.shape[1]))
+            for i in range(len(self.lines)):
+                basises[i]=self.get_basis(self.points[i],self.lines[i])
+            self.set_sigma_simulated(sigma)
+            stdses=self.get_stdses(basises)
+            self.create_p(self.omega,basises,self.points,stdses,save_reduced=True)
+            #self.values=self.values/np.sum(self.values)
+            data=self.convert_f_to_new_projection('berny',self.values_reduced,self.omega_reduced)
+        if method=='angle':
+            self.prod_theta_score_n_constrained(return_type='normal')
+            data=self.convert_f_to_new_projection('berny',self.values,self.omega)
+        #self.gaussian_score()
+        #self.make_heatmap_constrained()
+        plotter=Plotter('bernyterny')
+        points=self.convert_points_to_new_projection('berny',self.points)
+        end_points=self.get_end_points('berny')
+        point_labels={'Initial':[0,1],'b':[1,2],'c':[2,3]}
+        plotter.berny_testing(data,points,end_points,point_labels)
+
+    def random_initialise(self,n):
+        dim_constrained=(self.normal_vectors.shape[1]
+                         -self.normal_vectors.shape[0])
+        points=self.random_point_constrained(n=n+1)
+        self.goal=points[0]
+        self.points=points[1:]
+        self.lines=np.empty((0,dim_constrained))
+        self.end_points=np.empty((0,dim_constrained))
+        for i in range(n):
+            self.create_line_from_sample_constrained(
+                dim_constrained,i,method='use_sigma',sigma=self.sigma)
+
+    def convert_to_ternary_basis(self,x):
+        x_t=np.empty((len(x),2))
+        for n,i in enumerate(x):
+            x_tt = [i[0]+i[1]/2,SQRT3OVER2*i[1]]
+            x_t[n]=x_tt
+        return x_t
+
+    def get_end_points(self,method):
+        points=self.convert_points_to_new_projection('berny',self.points)
+        end_points=self.convert_points_to_new_projection('berny',self.end_points)
+        lines=end_points-points
+        constraint=self.normal_vectors[0][:3]
+        end_points_t=np.empty((points.shape[0],points.shape[1]+1))
+        for i in range(len(self.points)):
+            start=np.append(points[i],100-np.sum(points[i]))
+            delta=np.append(lines[i],-np.sum(lines[i]))
+            distance_to_boundary=-start/delta
+            mindist=99999
+            for j in range(len(start)):
+                if delta[j] < 0:
+                    if distance_to_boundary[j]<mindist:
+                        mindist=distance_to_boundary[j]
+            end_points_t[i]=start+mindist*delta
+        return end_points_t
+
+    def convert_to_berny_basis(self,x):
+        print('hhhh',x.shape)
+        amount=x[:,:3].sum(axis=1)
+        normalised=100*x/(np.broadcast_to(amount,(4,len(x))).T)
+        return normalised[:,:2]
+
+    def convert_f_to_new_projection(self,projection,f_values,f_locations):
+        if len(f_values)!=len(f_locations):
+               print('Error number of values does not match umber of locations')
+        if projection=='berny':
+            f_locations_stan=self.convert_to_standard_basis(use_omega=False,omega=f_locations)
+            f_locations_to_tern=self.convert_to_berny_basis(f_locations_stan)
+            print('Remember to test wich corners are which')
+            (gridpoints_tuple,gridpoints)=self.create_grid_points()
+            f=interpolate.griddata(f_locations_to_tern,f_values,gridpoints,method='cubic',fill_value=0)
+            data=dict(zip(gridpoints_tuple,f))
+            return data
+            
+    def convert_points_to_new_projection(self,projection,points):
+        if projection=='berny':
+            points_stan=self.convert_to_standard_basis(use_omega=False,omega=points)
+            print('uuu',points_stan.shape)
+            points_to_tern=self.convert_to_berny_basis(points_stan)
+            return points_to_tern
+
+    def create_grid_points(self):
+        n = 101
+        total = int(n*(n+1)/2)
+        gridpoints_tuple = [None]*total
+        gridpoints_array=np.empty((total,2))
+        count=0
+        for i in range(0,101):
+            for j in range(0,101-i):
+                gridpoints_tuple[count]=(i,j)
+                gridpoints_array[count]=[i,j]
+                count += 1
+        return (gridpoints_tuple,gridpoints_array)
+
+    def get_score(self,method):
+        if method=='d_g_mu':
+            mean=self.get_mean(f=self.values)
+        return np.linalg.norm(mean-self.goal)
+
+    def choose_next_best_point_a(self,power):
+        #chooses next best as a sample from omega
+        sample=self.values**power
+        sample=sample/np.sum(sample)
+        next_point=self.omega[np.random.choice(
+            range(len(self.omega)),p=sample)]
+        return next_point
+
+    def choose_next_best_point_b(
+            self,num_points,num_targets,angular_equivalence,increment,
+            considered_fraction):
+        dim = self.constrained_dim
+        values=self.values
+        self.get_points_targets_for_exploration_evaluation_b(
+            num_points=num_points,num_targets=num_targets)
+        weights=self.weight_points_for_exploration_evaluation(
+            cutoff = angular_equivalence)
+        change_score = self.expected_gain_in_info()
+        expected_score=np.sum(weights*change_score,axis=0)
+        sorted_trial_points=self.exploration_points[expected_score.argsort()]
+        return sorted_trial_points[-1]
+
+    def get_points_targets_for_exploration_evaluation_b(
+        self,num_points=10,num_targets=100):
+        p=self.values
+        p=p/np.sum(p)
+        points=self.omega[np.random.choice(
+            range(len(self.omega)),p=p,size=num_points+num_targets,
+            replace=False)
+        self.exploration_points = points[:num_points]
+        self.exploration_targets = points[num_points:]
+
+    def sample_next_point(self,sigma,power=1):
+        point=self.choose_next_best_point_a(power)
+        if np.all(point == self.goal):
+            return False
+        self.add_point(point)
+        self.create_line_from_sample_constrained(
+            self.constrained_dim,-1,method='use_sigma',sigma=sigma)
+        return True
+        
+    def update_values(self,point_indexes,sigma,scale,delta):
+        basises=np.empty(
+            (len(point_indexes),self.lines.shape[1],self.lines.shape[1]))
+        points=np.empty((len(point_indexes),self.lines.shape[1]))
+        for i,index in enumerate(point_indexes):
+            basises[i]=self.get_basis(self.points[index],self.lines[index])
+            points[i]=self.points[index]
+
+        self.set_sigma_simulated(sigma,scale)
+        stdses=self.get_stdses(basises)
+        self.create_p(
+            self.omega,basises,points,stdses,delta=delta,addition=True)
+
+    def sample_points_test(
+            self,number_samples,normal_vectors,contained_point,cube_size,sigma,
+            scale,delta,power):
+        self.setup(normal_vectors,contained_point,cube_size,sigma)
+        self.random_initialise(1)
+        self.make_p_gaussian(sigma,scale,delta)
+        score=np.empty((number_samples+1))
+        score[0]=self.get_score('d_g_mu')
+        for i in range(number_samples):
+            if self.sample_next_point(sigma,power):
+                self.update_values([-1],sigma,scale,delta)
+                score[i+1]=self.get_score('d_g_mu')
+            else:
+                score[i+1]=0
+        return score
+
+
+
+
+        '''
 @jit(nopython=True)
 def block2(a,b,omega,m,count):
         a_broad = np.broadcast_to(a,(count,m,3))
@@ -918,7 +1998,7 @@ def block2(a,b,omega,m,count):
         theta = np.arccos((ab_normed_broad*a_omega_normed).sum(axis=2))
         theta_p = np.exp(-1*theta/k)
         values = np.prod(theta_p,axis=0)
-        #block 3
-        '''
+              #block
+'''
 
 
