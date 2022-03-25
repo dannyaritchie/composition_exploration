@@ -54,10 +54,10 @@ class Results:
         self.normal_vectors=np.stack((normal_a,normal_b)) 
         self.cube_size=100
         self.contained_point=np.array([2,1,1,1])*self.cube_size/5
-        dist=0.5 #simulated distance of avg known composition to sample
+        dist=0.05 #simulated distance of avg known composition to sample
         self.sigma=np.diag(np.array([0.0188,0.0188])/dist)
         self.score_method='d_g_mu'
-        self.p_method='guassian'
+        self.p_method='angle_product'
         self.n=3
         self.parameter_key='A'
 
@@ -86,59 +86,59 @@ class Results:
     def two_d_results(self,filename,m=10):
         self.set_default_columns()
         for n in [4]:
-            for parameter in ['D','E']:
+            for parameter in ['A','B']:
                 self.n=n
                 self.parameter_key=parameter
                 self.save_results(filename,n_trials=m)
 
     def plot_mean_vs(self,vs,selection_dic,filename,save_path=None):
         df=pd.read_csv(self.directory+filename)
-        for column in selection_dic:
-            df=df[df[column]==selection_dic[column]]
+        #for column in selection_dic:
+        #    df=df[df[column]==selection_dic[column]]
+        print(len(df))
         sns.catplot(x=vs,y='Score',data=df,kind='box')
         if save_path is not None:
             plt.savefig(save_path)
         plt.show()
 
-    def get_score_vs_add_points(self):
+    def get_score_vs_add_points(self,filename):
         normal_a = np.array([1,2,-2,-2])
         normal_b = np.array([1,1,1,1])
         self.normal_vectors=np.stack((normal_a,normal_b)) 
         self.cube_size=100
         self.contained_point=np.array([2,1,1,1])*self.cube_size/5
-        dist=0.5 #simulated distance of avg known composition to sample
+        dist=0.05 #simulated distance of avg known composition to sample
         self.sigma=np.diag(np.array([0.0188,0.0188])/dist)
         test=all_information()
 
-        filename='s1_d1_p2_a.txt'
-        number_samples=10
+        number_samples=5
         scale=1
         delta=1
-        power=2
-        number_repeats=1000
+        power=1
+        number_repeats=1
         scores=np.empty((number_repeats,number_samples+1))
         for i in range(number_repeats):
             print(i)
             scores[i]=test.sample_points_test(
                 number_samples,self.normal_vectors,self.contained_point,
-                self.cube_size,self.sigma,scale,delta,power)
+                self.cube_size,self.sigma,scale,delta,power,plot_process=True)
         np.savetxt(self.directory+filename,scores)
 
-    def plot_score_vs_add_point(self):
+    def plot_score_vs_add_point(self,filename):
         fig,ax=plt.subplots(1,2)
-        filename='s1_d1_p1_a.txt'
         scores=np.loadtxt(self.directory+filename)
+        print(scores.shape)
         meana = np.mean(scores,axis=0)
         stda=np.std(scores,axis=0)
         ax[1].errorbar(
-            x=range(11),y=meana,yerr=stda,ecolor='red',elinewidth=1,ls='',
+            x=range(5),y=meana,yerr=stda,ecolor='red',elinewidth=1,ls='',
             marker='x',)
         filename='s1_d1_p2_a.txt'
         scores=np.loadtxt(self.directory+filename)
         meanb = np.mean(scores,axis=0)
         stdb=np.std(scores,axis=0)
         ax[0].errorbar(
-            x=range(11),y=meanb,yerr=stdb,ecolor='red',elinewidth=1,ls='',
+            x=range(5),y=meanb,yerr=stdb,ecolor='red',elinewidth=1,ls='',
             marker='x',)
         plt.show()
         

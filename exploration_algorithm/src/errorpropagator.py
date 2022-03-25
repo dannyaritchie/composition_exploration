@@ -6,34 +6,33 @@ import scipy.stats
 
 class error_propagator:
 
-    def __init__(self,dim=2):
+    def __init__(self,dim,cube_size,contained_point):
         self.dim=dim
+        self.cube_size=cube_size
+        self.contained_point=contained_point
 
     def set_moles_error(self,moles,formulas,moles_error):
         self.moles=np.array(moles)
         self.moles_error=np.array(moles_error)
         self.small_balls_mean_unnorm=np.array(formulas)
-        for i in self.small_balls_mean_unnorm:
-            print('start mean',i)
         merged_mean=np.zeros(self.small_balls_mean_unnorm.shape[1])
         merged_mean_std=np.zeros(self.small_balls_mean_unnorm.shape[1])
         for i in range(len(moles)):
             merged_mean=merged_mean+self.moles[i]*self.small_balls_mean_unnorm[i]
             merged_mean_std=merged_mean_std+(self.moles_error[i]*self.small_balls_mean_unnorm[i])**2
-        self.merged_mean=merged_mean/np.sum(merged_mean)
-        self.merged_mean_std=merged_mean_std**0.5/np.sum(merged_mean)
+        self.merged_mean=self.cube_size*merged_mean/np.sum(merged_mean)
+        self.merged_mean_std=self.cube_size*merged_mean_std**0.5/np.sum(merged_mean)
         self.merged_sigma = np.diag(self.merged_mean_std)
         #set small ball means and error
         #errors are scaled so that when combine the balls are of right scale
         self.weighted_moles_error=[0]*len(moles_error)
         for i in range(len(moles)):
-            weighted_mole_error=moles_error[i]/np.sum(merged_mean)
+            weighted_mole_error=self.cube_size*moles_error[i]/np.sum(merged_mean)
             self.weighted_moles_error[i]=weighted_mole_error
         self.small_balls_sigma=np.empty((len(formulas),self.dim,self.dim))
-        print('hihi',self.small_balls_mean_unnorm.shape)
         self.small_balls_mean=np.empty((self.small_balls_mean_unnorm.shape))
         for i in range(len(self.small_balls_mean)):
-            self.small_balls_mean[i]=self.small_balls_mean_unnorm[i]/np.sum(self.small_balls_mean_unnorm[i])
+            self.small_balls_mean[i]=self.cube_size*self.small_balls_mean_unnorm[i]/np.sum(self.small_balls_mean_unnorm[i])
         for i in range(len(formulas)):
             diag=np.array([x*self.weighted_moles_error[i] for x in formulas[i]])
             self.small_balls_sigma[i] = np.diag(diag)
@@ -69,8 +68,6 @@ class error_propagator:
     def get_small_balls_p(self,us):
         #returns mean and sigma (both dimesnion of us[1]) for each ball
         self.project_small_balls_onto_us(us)
-        for i in self.small_balls_mean_p:
-            print('N-1 ball mean',i)
         return (self.small_balls_mean_p,self.small_balls_sigma_p)
 
     def initialise(self,method,goal,sample):
@@ -119,16 +116,14 @@ class error_propagator:
 
     def project_onto_us(self,us,sigma=None,mean=None):
         if sigma is None:
-            print('hey')
             sigma=self.sigma
             mean=self.mean
         if us.shape[1]!=self.dim:
             print('Error, projection vectors must have same dimension as space')
         else:
-            print('pre proj mean',mean)
             self.us=us
-            projected_means=np.matmul(us,mean)
-            print('N-3 proj mean',projected_means)
+            mean=mean-self.contained_point
+            projected_means=np.einsum('ij,j',us,mean)
             projected_sigmas=np.empty((len(us)))
             for n,u in enumerate(us):
                 projected_sigma=np.array([np.einsum('k,kl,l',u,sigma,u)])
@@ -142,7 +137,6 @@ class error_propagator:
 
 
     def project_onto_u(self,u):
-        print(u.shape)
         if u.shape[0]!=self.dim:
             print('Error, projection vectors must have same dimension as space')
         else:

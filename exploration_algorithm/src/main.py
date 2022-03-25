@@ -10,6 +10,7 @@ from wtconversion import *
 from errorpropagator import * 
 from dataparser import *
 from results import *
+import seaborn as sns
 
 #add test comment
 
@@ -499,40 +500,451 @@ normal_a = np.array([1,2,-2,-2])
 normal_b = np.array([1,1,1,1])
 normal_vectors=np.stack((normal_a,normal_b)) 
 cube_size=100
-contained_point=np.array([1,1,1,2])*cube_size/5
-dist=0.5 #simulated distance of avg known composition to sample
+contained_point=np.array([2,1,1,1])*cube_size/5
+dist=0.05 #simulated distance of avg known composition to sample
 sigma=np.diag(np.array([0.0188,0.0188])/dist)
-setup.berny_test(normal_vectors,cube_size,contained_point,sigma,method='angle')
+setup.berny_test(normal_vectors,cube_size,contained_point,sigma,method='p')
 '''
 #code for saving results
 '''
 directory='../data/a/'
 results=Results(directory)
-results.two_d_results('test.csv',m=1000)
+results.two_d_results('unsure.csv',m=1000)
 '''
 #code for plotting results
 '''
 selection_dic={
     'Score method' : 'd_g_mu',
-    'P method' : 'guassian',
+    'P method' : 'angle_product',
     'std' : 0.0188*2,
     'cube_size' : 100,
     'Phase field key' : 'A',
     #'Parameter key' : 'A',
-    'Number of points': 4}
+    'Number of points': 3}
 directory='../data/a/'
 results=Results(directory)
-results.plot_mean_vs('Parameter key',selection_dic,'test.csv',
+results.plot_mean_vs('Parameter key',selection_dic,'unsure.csv',
                     save_path='../results/a/mu_p_3.png')
 '''
 #code for getting mean for adding points
 '''
 directory='../data/adding_points_scores/'
+filename='testtest.txt'
+#filename='s1_d1_p2_a.txt'
 results=Results(directory)
-results.get_score_vs_add_points()
+results.get_score_vs_add_points(filename)
 '''
+
 #code for plottting adding point scores
-directory='../data/adding_points_scores/'
-results=Results(directory)
-results.plot_score_vs_add_point()
+'''
+setup=all_information()
+normal_a = np.array([1,2,4,-2])
+normal_b = np.array([1,1,1,1])
+normal_vectors=np.stack((normal_a,normal_b)) 
+cube_size=100
+contained_point=np.array([2,1,1,4])*cube_size/8
+sigma=np.diag([0.186,0.186])
+scale=1
+delta=1
+power=1
+num_samples=4
+directory='../figures/processfigures/'
+setup.setup(normal_vectors,contained_point,cube_size,sigma,create_heatmap=True)
+setup.random_initialise(1)
+points=setup.convert_points_to_new_projection('berny',setup.points)
+goal=setup.convert_points_to_new_projection('berny',setup.goal)
+setup.make_p_gaussian(sigma,scale,delta)
+plotter=Plotter('bernyterny')
+plotter.process_a(goal,num_samples)
+labels={
+    'Initial':[0,1],
+}
+for i in range(num_samples):
+    print(i)
+    end_points=setup.get_end_points('berny')
+    unsuc = setup.sample_next_point(
+        'a',sigma,power=power)
+    points=np.append(points,setup.convert_points_to_new_projection(
+        'berny',np.array([setup.points[-1]])),axis=0)
+    values_norm=setup.values/np.sum(setup.values)
+    data=setup.convert_f_to_new_projection('berny',values_norm,setup.omega)
+    filename=str(i)+'.png'
+    plotter.berny_heat_points(directory+filename,data,points,labels,end_points)
+    labels['Sample ' + str(i)]=[i+1,i+2]
+    labels['Next sample point']:[i+2,i+3]
+    setup.update_values([-1],sigma,scale,delta)
+'''
+
+
+
+
+
+
+#code for making figures for presentations
+    #Figure of multiple small balls
+'''
+setup=all_information()
+normal_a = np.array([1,2,4,-2])
+normal_b = np.array([1,1,1,1])
+normal_vectors=np.stack((normal_a,normal_b)) 
+cube_size=100
+contained_point=np.array([2,1,1,4])*cube_size/8
+setup.create_omega_constrained(
+    normal_vectors,cube_size,contained_point,create_heatmap=True)
+f1='Li 4 Zn 0 Si 1 S 4'
+f2='Li 0 Zn 1 Si 0 S 1'
+f3='Li 2 Zn 0 Si 0 S 1'
+sampled_point=np.array([24,10,9,40])
+sampled_point=cube_size*sampled_point/np.sum(sampled_point)
+formulas=[f1,f2,f3]
+weights=[0.47,0.36,0.07]
+wt_convert=wt_converter()
+error_propagate=error_propagator(4,cube_size,contained_point)
+moles,moles_error,formulas_standard=wt_convert.wt_to_moles(
+    formulas,weights,weights_error=[0.05])
+error_propagate.set_moles_error(moles,formulas_standard,moles_error)
+merged_mean,merged_sigma=error_propagate.get_merged_balls_p(setup.basis)
+(mean,sigma)=error_propagate.get_merged_balls()
+print(mean)
+print(sigma)
+small_means,small_sigmas=error_propagate.get_small_balls_p(setup.basis)
+#setup.plot_small_balls(small_means,small_sigmas,projection='None')
+point_labels=['Li4SiS4','ZnS','Li2S']
+sample_label=['Li24Zn10Si9S40']
+mean_label='K'
+#setup.plot_small_balls(
+    #small_means,small_sigmas,sampled_point,point_labels,sample_label,
+    #projection='berny',heatmap=False)
+setup.plot_merged_ball(
+    merged_mean,merged_sigma,small_means,point_labels,mean_label,
+    projection='berny')
+
+#setup.plot_merged_ball(merged_mean,merged_sigma,projection='None')
+#setup.add_first_sample(sampled_point,merged_mean,merged_sigma)
+#delta=0.1
+#setup.calculate_p_from_samples(delta)
+#setup.plot_p()
+#setup.plot_merged_ball_p(merged_mean,merged_sigma,delta)
+'''
+#code for getting sigma
+'''
+sigmas=np.empty((200))
+for i in range(1):
+    setup=all_information()
+    normal_a = np.array([1,2,4,-2])
+    normal_b = np.array([1,1,1,1])
+    normal_vectors=np.stack((normal_a,normal_b)) 
+    cube_size=100
+    contained_point=np.array([2,1,1,4])*cube_size/8
+    setup.create_omega_constrained(
+        normal_vectors,cube_size,contained_point,create_heatmap=True)
+    f1='Li 4 Zn 0 Si 1 S 4'
+    f2='Li 0 Zn 1 Si 0 S 1'
+    f3='Li 2 Zn 0 Si 0 S 1'
+    sampled_point=np.array([24,10,9,40])
+    sampled_point=cube_size*sampled_point/np.sum(sampled_point)
+    formulas=[f1,f2,f3]
+    weights=[0.5,0.39,0.10]
+    wt_convert=wt_converter()
+    error_propagate=error_propagator(4,cube_size,contained_point)
+    moles,moles_error,formulas_standard=wt_convert.wt_to_moles(
+        formulas,weights,weights_error=[0.05])
+    print(moles/np.sum(moles)*6)
+    print(6*moles_error/np.sum(moles))
+    error_propagate.set_moles_error(moles,formulas_standard,moles_error)
+    print(error_propagate.get_small_balls()[0])
+    print(error_propagate.get_merged_balls()[0])
+    merged_mean,merged_sigma=error_propagate.get_merged_balls_p(setup.basis)
+    #setup.plot_merged_ball(merged_mean,merged_sigma,projection='None')
+    sigma=setup.add_first_sample(sampled_point,merged_mean,merged_sigma)[0]
+    sigmas[i]=sigma[0]
+    sigmas[100+i]=sigma[1]
+    #delta=0.1
+    #setup.calculate_p_from_samples(delta)
+    #setup.plot_p()
+    #setup.plot_merged_ball_p(merged_mean,merged_sigma,delta)
+print(np.mean(sigmas))
+#code for testing batch sampling
+#1) sample along initial line vs use exploration
+'''
+#sample along line plot
+'''
+setup=all_information()
+normal_a = np.array([1,2,4,-2])
+normal_b = np.array([1,1,1,1])
+normal_vectors=np.stack((normal_a,normal_b)) 
+cube_size=100
+contained_point=np.array([2,1,1,4])*cube_size/8
+sigma=np.diag([0.186,0.186])
+scale=1
+delta=1
+power=1
+num_batches=1
+batchsize=5
+directory='../figures/processfigures/sampleonline'
+setup.setup(normal_vectors,contained_point,cube_size,sigma,create_heatmap=True)
+setup.random_initialise(1)
+goal=setup.convert_points_to_new_projection('berny',setup.goal)
+setup.make_p_gaussian(sigma,scale,delta)
+plotter=Plotter('bernyterny')
+plotter.process_batch(goal,num_batches)
+labels={
+    'Initial':[0,1],
+    'First batch':[1,6]
+}
+for i in range(num_batches):
+    print(i)
+    setup.sample_next_batch('lastline',batchsize,sigma,scale,delta)
+    points=setup.convert_points_to_new_projection('berny',setup.points)
+    end_points=setup.get_end_points('berny')
+    values_norm=setup.values/np.sum(setup.values)
+    data=setup.convert_f_to_new_projection('berny',values_norm,setup.omega)
+    filename=str(i)+'.png'
+    plotter.berny_heat_points(directory+filename,data,points,labels,end_points)
+'''
+#sample along line vs explore score
+'''
+num_trials=1000
+setup=all_information()
+normal_a = np.array([1,2,4,-2])
+normal_b = np.array([1,1,1,1])
+normal_vectors=np.stack((normal_a,normal_b)) 
+cube_size=100
+contained_point=np.array([2,1,1,4])*cube_size/8
+sigma=np.diag([0.186,0.186])
+scale=1
+delta=1
+power=1
+batchsize=5
+num_points=50
+num_targets=50
+angular_equivalence=10
+exclusion=3
+directory='../figures/sampleonlinevsexploration/'
+scores=np.empty((num_trials,3))
+scoresb=np.empty((num_trials,3))
+for i in range(num_trials):
+    print(i,'--------')
+    setup.setup(normal_vectors,contained_point,cube_size,sigma)
+    setup.random_initialise(1)
+    setup.make_p_gaussian(sigma,scale,delta,save_reduced=True)
+    if setup.sample_next_batch(
+        'pure_explore',batchsize,sigma,scale,delta,num_points=num_points
+        ,num_targets=num_targets,angular_equivalence=angular_equivalence,
+        exclusion=exclusion):
+        scoresb[i]=setup.get_score('mean_mode_variance')
+    else:
+        scoresb[i]=[0,0,0]
+    setup.revert_to_initial()
+    setup.make_p_gaussian(sigma,scale,delta,save_reduced=True)
+    if setup.sample_next_batch('lastline',batchsize,sigma,scale,delta):
+        scores[i]=setup.get_score('mean_mode_variance')
+    else:
+        scoresb[i]=[0,0,0]
+dscores=scores-scoresb
+ys = ['Distance from mean','Distance from max','Variance']
+df=pd.DataFrame(
+    data=scores,columns=ys)
+dfb=pd.DataFrame(
+    data=scoresb,columns=ys)
+dfc=pd.DataFrame(
+    data=dscores,columns=ys)
+dfb['Method']='Explore A'
+df['Method']='On line'
+dfc['Method']='On line - Explore'
+print(dfb[dfb['Method']=='Explore A'].shape[0])
+print(df[df['Method']=='On line'].shape[0])
+df=df.append(dfb)
+print(df.shape[0])
+for y in ys:
+    ax=sns.pointplot(
+        x='Method',y=y,data=df,capsize=1,linestyles="",errwidth=1)
+    plt.savefig(directory+y + '.png',bbox_inches='tight')
+    plt.clf()
+    ax=sns.pointplot(
+        x='Method',y=y,data=dfc,capsize=1,linestyles="",errwidth=1)
+    plt.savefig(directory+y + '_diff.png',bbox_inches='tight')
+    plt.clf()
+path="../data/sampleonlinevsexploration/a.csv"
+df.to_csv(
+    path,mode='a',header=not os.path.exists(path),index=False)
+'''
+#plot process for explore
+'''dd
+setup=all_information()
+normal_a = np.array([1,2,4,-2])
+normal_b = np.array([1,1,1,1])
+normal_vectors=np.stack((normal_a,normal_b)) 
+cube_size=100
+contained_point=np.array([2,1,1,4])*cube_size/8
+sigma=np.diag([0.186,0.186])
+scale=1
+delta=1
+power=1
+batchsize=5
+num_points=50
+num_targets=50
+angular_equivalence=10
+exclusion=3
+directory='../figures/sampleonlinevsexploration/'
+setup.setup(normal_vectors,contained_point,cube_size,sigma)
+setup.random_initialise(1)
+setup.make_p_gaussian(sigma,scale,delta,save_reduced=True)
+setup.sample_next_batch(
+    'pure_explore',batchsize,sigma,scale,delta,num_points=num_points
+    ,num_targets=num_targets,angular_equivalence=angular_equivalence,
+    exclusion=exclusion,plot_process=True)
+'''
+#code to test next sample algorithm
+'''
+setup=all_information()
+normal_a = np.array([1,2,4,-2])
+normal_b = np.array([1,1,1,1])
+normal_vectors=np.stack((normal_a,normal_b)) 
+cube_size=100
+contained_point=np.array([2,1,1,4])*cube_size/8
+sigma=np.diag([0.186,0.186])
+scale=1
+delta=1
+power=1
+num_lines=500
+directory='../figures/sampleonlinevsexploration/'
+setup.setup(normal_vectors,contained_point,cube_size,sigma,create_heatmap=True)
+setup.random_initialise(1)
+setup.make_p_gaussian(sigma,scale,delta,save_reduced=True)
+setup.next_sample_test(sigma,scale,delta,num_lines)
+'''
+#code for optimising batch on line parameters for jon field
+'''
+setup=all_information()
+normal_a = np.array([1,3,-1,-1,-2])
+normal_b = np.array([1,1,1,1,1])
+normal_vectors=np.stack((normal_a,normal_b)) 
+cube_size=40
+contained_point=np.array([1,1,1,1,1])*cube_size/5
+sigma=np.diag([0.186,0.186,0.186])
+scale=2
+delta_param=20
+delta=cube_size/delta_param
+num_trials=1000
+scores=np.empty((num_trials,3))
+for i in range(num_trials):
+    print(i)
+    setup.setup(normal_vectors,contained_point,cube_size,sigma)
+    setup.random_initialise(1)
+    setup.make_p_gaussian(sigma,scale,delta)
+    if setup.sample_next_batch('lastline',5,sigma,scale,delta):
+        scores[i]=setup.get_score('mean_mode_variance')
+    else:
+        scores[i]=n.array([0,0,0])
+ys = ['Distance from mean','Distance from max','Variance']
+df=pd.DataFrame(
+    data=scores,columns=ys)
+df['delta_param']=delta_param
+df['sigma']=sigma[0][0]
+df['scale']=scale
+directory='../figures/jons1opt/'
+path="../data/jons1opt/c.csv"
+df.to_csv(
+    path,mode='a',header=not os.path.exists(path),index=False)
+'''
+#code for plotting
+'''
+path="../data/jons1opt/c.csv"
+df=pd.read_csv(path)
+ys = ['Distance from mean','Distance from max','Variance']
+directory='../figures/jons1opt/delta_'
+for y in ys:
+    ax=sns.pointplot(
+        x='delta_param',y=y,data=df,capsize=1,linestyles="",errwidth=1)
+    plt.savefig(directory+y + '.png',bbox_inches='tight')
+    plt.clf()
+'''
+'''
+    ax=sns.pointplot(
+        x='Method',y=y,data=dfc,capsize=1,linestyles="",errwidth=1)
+    plt.savefig(directory+y + '_diff.png',bbox_inches='tight')
+    plt.clf()
+'''
+#code for plotting matt presentation figs
+setup=all_information()
+normal_a = np.array([1,2,4,-2])
+normal_b = np.array([1,1,1,1])
+normal_vectors=np.stack((normal_a,normal_b)) 
+cube_size=100
+delta_param=80
+scale=1
+delta=cube_size/delta_param
+contained_point=np.array([2,1,1,4])*cube_size/8
+setup.create_omega_constrained(
+    normal_vectors,cube_size,contained_point,create_heatmap=True)
+f1='Li 4 Zn 0 Si 1 S 4'
+f2='Li 0 Zn 1 Si 0 S 1'
+f3='Li 2 Zn 0 Si 0 S 1'
+sampled_point=np.array([24,10,9,40])
+goal_point=np.array([2,1,1,4])
+sampled_point=cube_size*sampled_point/np.sum(sampled_point)
+goal_point=cube_size*goal_point/np.sum(goal_point)
+setup.goal=setup.convert_point_to_constrained(goal_point)
+formulas=[f1,f2,f3]
+weights=[0.51,0.40,0.09]
+wt_convert=wt_converter()
+error_propagate=error_propagator(4,cube_size,contained_point)
+moles,moles_error,formulas_standard=wt_convert.wt_to_moles(
+    formulas,weights,weights_error=[0.05])
+print(6*moles_error/np.sum(moles))
+print(6*moles/np.sum(moles))
+error_propagate.set_moles_error(moles,formulas_standard,moles_error)
+merged_mean,merged_sigma=error_propagate.get_merged_balls_p(setup.basis)
+small_means,small_sigmas=error_propagate.get_small_balls_p(setup.basis)
+sigma=setup.add_first_sample(sampled_point,merged_mean,merged_sigma)[0]
+#delta=0.1
+setup.calculate_p_from_samples(delta)
+plotter=Plotter('berny')
+points=setup.convert_points_to_new_projection('berny',setup.points)
+mean=setup.convert_points_to_new_projection('berny',merged_mean)
+end_points=setup.get_end_points('berny')
+#plotter.mean_line(points,end_points,mean)
+small_means=setup.convert_points_to_new_projection('berny',small_means)
+#labels=['Li4SiS (1.88M)','ZnS (2.79M)','Li2S (1.33M)']
+#plotter.mean_small(mean,small_means,labels)
+p=setup.make_merged_ball_values(merged_mean,merged_sigma)
+#data=setup.convert_f_to_new_projection('berny',p,setup.omega)
+#plotter.merged_ball(data,mean)
+#data=setup.convert_f_to_new_projection('berny',setup.values,setup.omega)
+#plotter.p_mean_initial(data,mean,points)
+setup.sample_next_batch(
+    'lastline',5,np.diag(merged_sigma),scale,delta,rietveld_closest=True)
+print(sampled_point)
+points=setup.convert_points_to_new_projection('berny',setup.points)
+points_s=setup.convert_to_standard_basis(setup.points)
+phase_field=['Li','Zn','Si','S']
+labels=['Initial']
+colors=['orange','green','purple','brown','red','blue']
+for i in points_s[1:]:
+    norm=i/np.sum(i)
+    label=''
+    for j,e in zip(norm,phase_field):
+        num=round(j,2)
+        if num!=0:
+            label=label+e+str(int(round(100*num,0)))
+    labels.append(label)
+for i in labels:
+    print(i)
+#plotter.linebatch_initial(points,labels,colors)
+goal=setup.convert_points_to_new_projection('berny',setup.goal)
+chosen_point=setup.convert_points_to_new_projection('berny',setup.chosen_point)
+#plotter.linebatch_initial_chosen(points,labels,colors,chosen_point)
+data=setup.convert_f_to_new_projection('berny',setup.values,setup.omega)
+p=setup.values/np.sum(setup.values)
+maxp=setup.convert_points_to_new_projection(
+    'berny',setup.get_max(f=p))
+#plotter.p_second_max(data,maxp)
+next_points=setup.convert_points_to_new_projection(
+    'berny',setup.choose_next_best_points_sphere('max',4,80))
+next_points=np.append(next_points,[maxp],axis=0)
+plotter.second_batch(next_points)
+
+
+
 

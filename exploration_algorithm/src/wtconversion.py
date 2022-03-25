@@ -1,3 +1,4 @@
+import numpy as np
 class wt_converter:
     def __init__(self):
     # Dictionary of all elements matched with their atomic masses.
@@ -149,6 +150,6 @@ class wt_converter:
                           (weights[i]*total_mass_error)**2)**0.5)/molar_masses[i]
             moles[i]=mole
             moles_error[i]=mole_error
-        return (moles,moles_error,formulas_standard)
+        return (np.array(moles),np.array(moles_error),formulas_standard)
 
         

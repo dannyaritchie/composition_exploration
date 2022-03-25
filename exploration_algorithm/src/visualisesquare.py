@@ -3,10 +3,6 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 
 class visualise_square:
-    def __init__(self,x,y):
-        self.X=x
-        self.Y=y
-
     def generate_grid(self):
         x=np.empty((3))
     
@@ -27,8 +23,12 @@ class visualise_square:
         if show:
             plt.show()
 
-    def plot_scatter(self,ax,points_2d,lim=True,show=False,cube_size=None,**kwargs):
-        if ax is None:
+    def plot_scatter(
+        self,ax,points_2d,lim=False,show=False,cube_size=None,use_axs=None,
+        **kwargs):
+        if use_axs is not None:
+            ax=self.axs[use_axs[0]][use_axs[1]]
+        elif ax is None:
             fig,ax=plt.subplots(1,1)
         xs=points_2d[:,0]
         ys=points_2d[:,1]
@@ -150,6 +150,9 @@ class visualise_square:
         self.plot_heatmap(heatmap,xlim[0],xlim[1],ylim[0],ylim[1],ax=ax[1],show=False)
         plt.show()
 
+    def process_fig(self):
+        self.f,self.axs=plt.subplots(2,3)
+
     def goal_fig(self,goal,points,lines,ax=None,show=True,lims=None):
         if ax is None:
             fig=plt.figure()
@@ -164,8 +167,12 @@ class visualise_square:
         if show:
             plt.show()
 
-    def plot_heatmap(self,heatmap,xmin,xmax,ymin,ymax,ax=None,show=True,**kwargs):
-        if ax is None:
+    def plot_heatmap(
+        self,heatmap,xmin,xmax,ymin,ymax,ax=None,show=True,use_axs=None,
+        filename=None,**kwargs):
+        if use_axs is not None:
+            ax=self.axs[use_axs[0]][use_axs[1]]
+        elif ax is None:
             fig=plt.figure()
             ax=fig.add_subplot(1,1,1)
         extent=(xmin,xmax,ymin,ymax)
@@ -174,3 +181,16 @@ class visualise_square:
         #ax.set_ylim([ylim[0],ylim[1]])
         if show:
             plt.show()
+        if filename is not None:
+            plt.savefig(filename)
+
+    def next_sample_fig(self,heatmap,xlim,ylim,points,lines,goal,filename):
+        fig,ax=plt.subplots(1,2)
+        self.plot_heatmap(
+            heatmap,xlim[0],xlim[1],ylim[0],ylim[1],show=False,ax=ax[0])
+        self.plot_scatter(
+            ax[1],np.array([goal]),show=False,marker='x',c='red',label='Goal')
+        self.plot_scatter(
+            ax[1],points,show=False,label='Initial point',c='orange')
+        self.draw_lines(lines,ax[1],show=False)
+        plt.savefig(filename)

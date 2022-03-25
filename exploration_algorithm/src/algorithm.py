@@ -81,18 +81,18 @@ class all_information:
 
     def __init__(self,dim=3):
         self.lines = np.empty((0,dim))
+        
         #direction vector of lines
         #starting point of lines
         self.end_points = np.empty((0,dim))
         self.labels = None
         self.optimal_point=None
 
-    def setup(self,normal_vectors,contained_point,cube_size,sigma):
-        self.normal_vectors=normal_vectors
-        self.cube_size=cube_size
-        self.contained_point=contained_point
+    def setup(self,normal_vectors,contained_point,cube_size,sigma,
+              create_heatmap=False):
         self.sigma=sigma
-        self.create_omega_constrained(normal_vectors,cube_size,contained_point)
+        self.create_omega_constrained(normal_vectors,cube_size,contained_point,
+                                     create_heatmap=create_heatmap)
 
     def getdistance(self):
         return np.sqrt(np.sum((self.goal-self.optimal_point)**2))
@@ -883,9 +883,8 @@ class all_information:
             result = scipy.stats.skew(sorted_f)
         if method == 'variance':
             mean=self.get_mean(fs)
-            variance=np.sum(fs*np.linalg.norm(mean-self.omega))
-            normalisation=np.sum(fs)
-            result = variance/normalisation
+            result=np.sum(fs*np.linalg.norm(mean-self.omega))
+
         return result
 
     def f_score_test(self,n=10000,dim=3,num_points=50,theta_range=30,
@@ -1102,11 +1101,16 @@ class all_information:
             omega=self.omega
         if f is None:
             f=self.values[:,0]
-        normalisation = np.sum(f)
         u=np.swapaxes(np.broadcast_to(f,(omega.shape[1],len(f))),0,1)*omega
         mean=np.sum(u,axis=0)
-        mean = mean/normalisation
         return mean
+
+    def get_max(self,f=None,omega=None):
+        if omega is None:
+            omega=self.omega
+        if len(f) != len(omega):
+            print('Error - lengh of values must equal length of omega')
+        return omega[np.argmax(f)]
 
     def set_charge_constraint_normal(self, normal):
         self.charge_normal = normal
@@ -1150,6 +1154,9 @@ class all_information:
         self.basis=x
         self.max_co=max_co
         self.constrained_dim=plane_dim
+        self.contained_point=contained_point
+        self.normal_vectors=normal_vectors
+        self.cube_size=cube_size
 
     def random_point_constrained(self,n=1):
         choice = random.randrange(len(self.omega))
@@ -1208,6 +1215,7 @@ class all_information:
         if method == 'default':
             sigma=self.simulate_sample(method=method)
         stds = np.empty((len(x)))
+        print(sigma)
         for i in range(len(x)):
             stds[i] = np.einsum('k,kl,l',x[i],sigma,x[i])
         perp_vec=np.zeros((dim))
@@ -1223,14 +1231,13 @@ class all_information:
         self.plot2d_lines=np.empty((len(self.lines),2,2))
         if len(self.end_points)==len(self.points):
             for i in range(len(self.lines)):
-                print(self.lines[i],', norm: ',np.linalg.norm(self.lines[i]))
                 self.plot2d_lines[i]=[self.points[i],self.end_points[i]]
 
 
         '''
 
         ep.initialise('a',goal_standard[0][0],sample_standard[0][0])
-        x_standard=self.convert_to_standard_basis(use_omega=False,omega=x)
+        x_standard=self.convert_to_standard_basis(x)
         vs = np.empty((x.shape[0],x.shape[1]))
         for n,i in enumerate(x_standard):
             std=ep.get_std(i[0])
@@ -1309,15 +1316,10 @@ class all_information:
         if timed:
             print('Block 2: ', t2-t1)
 
-    def convert_to_standard_basis(self,use_omega=True,omega=None):
+    def convert_to_standard_basis(self,omega):
         A=self.basis
-        if use_omega:
-            omega=self.omega
         p_standard=self.contained_point+np.einsum('ji,...j->...i',A,omega)
-        if use_omega:
-            self.omega_standard=p_standard
-        else:
-            return p_standard
+        return p_standard
 
     def plot_jon_test(self,points=None):
         label=['0,1,2,3,4,5,6,7,8,9']
@@ -1373,8 +1375,7 @@ class all_information:
 
     def incorporate_pawley(self,kind='closer_further',plot=True):
         thrown=np.empty((0),dtype=int)
-        self.convert_to_standard_basis()
-        omega=self.omega_standard[:,0,:]
+        omega=self.convert_to_standard_basis(self.omega)
         self.reduced_omega=omega
         d=self.reduced_omega.shape[1]
         if kind == 'closer_further':
@@ -1541,14 +1542,14 @@ class all_information:
             print('aa')
             print(closer)
             print(further)
-            closer_standard=self.convert_to_standard_basis(use_omega=False,omega=closer)
-            further_standard=self.convert_to_standard_basis(use_omega=False,omega=further)
-            goal_standard=self.convert_to_standard_basis(use_omega=False,omega=np.array([self.goal]))
+            closer_standard=self.convert_to_standard_basis(closer)
+            further_standard=self.convert_to_standard_basis(further)
+            goal_standard=self.convert_to_standard_basis(self.goal)
             plotter=Plotter(5)
             plotter.create_fig()
             plotter.add_points(closer_standard)
             plotter.plot_points(show=False,c='green')
-            plotter.add_points(goal_standard)
+            plotter.add_points([goal_standard])
             plotter.plot_points(show=False,c='blue')
             plotter.add_points(further_standard)
             plotter.plot_points(c='red')
@@ -1582,7 +1583,7 @@ class all_information:
         for i in range(500):
             self.add_point([self.points[0]])
             self.create_line_from_sample_constrained(dim_constrained,i+1,method='use_sigma',sigma=sigma)
-        plotter=visualise_square(self.basis[0],self.basis[1])
+        plotter=visualise_square()
         self.create_plot_lines()
         plotter.test_fig(self.plot2d_lines,self.points[0])
 
@@ -1630,7 +1631,7 @@ class all_information:
     def plot_square_test(self):
         wt_convert = wt_converter()
         error_propagate = error_propagator(dim=4)
-        plotter=visualise_square(self.basis[0],self.basis[1])
+        plotter=visualise_square()
 #        plotter.plot_omega(self.omega)
         #formula_a="Cs 1 Bi 1 Se 1 I 2"
         formula_a="Cs 1 Bi 1 Se 0 I 4"
@@ -1652,8 +1653,12 @@ class all_information:
         omega=self.omega
         self.values=np.array([1]*len(omega))
 
-    def make_heatmap_constrained(self):
-        for point,value in zip(self.omega,self.values):
+    def make_heatmap_constrained(self,values=None,omega=None):
+        if values is None:
+            values=self.values
+        if omega is None:
+            omega=self.omega
+        for point,value in zip(omega,values):
             i=point[0]-self.xlim[0]
             j=point[1]-self.ylim[0]
             self.heatmap[j,i]=value
@@ -1676,7 +1681,7 @@ class all_information:
         if method == 'p':
             basises=np.empty((self.lines.shape[0],self.lines.shape[1],self.lines.shape[1]))
             for i in range(len(self.lines)):
-                basises[i]=self.get_basis(self.points[i],self.lines[i])
+                basises[i]=self.get_basis(self.lines[i])
             self.set_sigma_simulated(sigma,1)
             stdses=self.get_stdses(basises)
             self.create_p(self.omega,basises,self.points,stdses,save_reduced=True)
@@ -1687,21 +1692,23 @@ class all_information:
 
         #self.gaussian_score()
         self.make_heatmap_constrained()
-        plotter=visualise_square(self.basis[0],self.basis[1])
+        plotter=visualise_square()
         #plotter.plot_heatmap(self.heatmap,self.xlim,self.ylim)
         self.create_plot_lines()
         #plotter.test_fig(self.plot2d_lines,self.points[0])
-        #goal=self.convert_to_standard_basis(use_omega=False,omega=np.array([self.goal]))[0]
+        #goal=self.convert_to_standard_basis(self.goal)
         #print(goal.shape)
         plotter.test_fig(self.goal,self.points,self.plot2d_lines,self.heatmap,self.xlim,self.ylim,self.omega,mean)
 
-    def make_p_gaussian(self,sigma,scale,delta):
+    def make_p_gaussian(self,sigma,scale,delta,save_reduced=False):
         basises=np.empty((self.lines.shape[0],self.lines.shape[1],self.lines.shape[1]))
         for i in range(len(self.lines)):
-            basises[i]=self.get_basis(self.points[i],self.lines[i])
+            basises[i]=self.get_basis(self.lines[i])
         self.set_sigma_simulated(sigma,scale)
         stdses=self.get_stdses(basises)
-        self.create_p(self.omega,basises,self.points,stdses,delta=delta)
+        self.create_p(
+            self.omega,basises,self.points,stdses,delta=delta,
+            save_reduced=save_reduced)
         
     def get_stdses(self,basises):
         #function to compute the standard deviation in each of the directions
@@ -1713,7 +1720,7 @@ class all_information:
         return stdses
 
 
-    def get_basis(self, sample, estimated_direction):
+    def get_basis(self, estimated_direction):
         dim = len(estimated_direction)
         #function to caluclate basis for each sample
         #basis: numpy (dim,dim) array such such that
@@ -1764,10 +1771,10 @@ class all_information:
 
         #project points
         ax_perp_broad=np.moveaxis(np.broadcast_to(ax_perp_reduced,(dim,o,n)),0,2)
-        ax_proj=np.zeros((o,n,dim))
-        np.divide(ax_reduced,ax_perp_broad,where=ax_perp_broad!=0,out=ax_proj)
+        #ax_proj=np.zeros((o,n,dim))
+        #np.divide(ax_reduced,ax_perp_broad,where=ax_perp_broad!=0,out=ax_proj)
         parallel_directions=basises[:,1:]
-        ax_parallel=np.einsum('...id,ikd->...ik',ax_proj,parallel_directions)
+        ax_parallel=np.einsum('...id,ikd->...ik',ax_reduced,parallel_directions)
 
         #scale sigmas
         scaled_std=np.einsum('...i,k...->k...i',stdses,ax_perp_reduced)
@@ -1777,8 +1784,9 @@ class all_information:
         upper = ax_parallel+delta
         CDF_upper=scipy.stats.norm(loc=0,scale=scaled_std).cdf(upper)
         p_reduced=CDF_upper-CDF_lower
-        normalisation=np.sum(p_reduced,axis=0)
-        p_reduced=p_reduced/np.broadcast_to(normalisation,p_reduced.shape)
+        #normalisation?
+        #normalisation=np.sum(p_reduced,axis=0)
+        #p_reduced=p_reduced/np.broadcast_to(normalisation,p_reduced.shape)
         p_reduced=np.prod(p_reduced,axis=2)
         p_reduced=np.prod(p_reduced,axis=1)
         p=np.zeros((len(omega)))
@@ -1794,25 +1802,25 @@ class all_information:
 
 
     def berny_test(
-            self,normal_vectors,cube_size,contained_point,sigma,method='p'):
+            self,normal_vectors,cube_size,contained_point,sigma,method='p',scale=1,delta=1):
         self.contained_point=contained_point
         self.normal_vectors=normal_vectors
         dim_constrained=normal_vectors.shape[1]-normal_vectors.shape[0]
         self.create_omega_constrained(normal_vectors,cube_size,
                                       contained_point,create_heatmap=True)
         self.add_random_initial_constrained()
-        self.add_point(np.array(self.random_point_constrained()))
-        self.add_point(np.array(self.random_point_constrained()))
+        #self.add_point(np.array(self.random_point_constrained()))
+        #self.add_point(np.array(self.random_point_constrained()))
         self.add_random_goal_constrained()
         self.lines = np.empty((0,dim_constrained))
         self.end_points = np.empty((0,dim_constrained))
         self.create_line_from_sample_constrained(dim_constrained,0,method='use_sigma',sigma=sigma,length=40)
-        self.create_line_from_sample_constrained(dim_constrained,1,method='use_sigma',sigma=sigma,length=40)
-        self.create_line_from_sample_constrained(dim_constrained,2,method='use_sigma',sigma=sigma,length=40)
+        #self.create_line_from_sample_constrained(dim_constrained,1,method='use_sigma',sigma=sigma,length=40)
+        #self.create_line_from_sample_constrained(dim_constrained,2,method='use_sigma',sigma=sigma,length=40)
         if method=='p':
             basises=np.empty((self.lines.shape[0],self.lines.shape[1],self.lines.shape[1]))
             for i in range(len(self.lines)):
-                basises[i]=self.get_basis(self.points[i],self.lines[i])
+                basises[i]=self.get_basis(self.lines[i])
             self.set_sigma_simulated(sigma)
             stdses=self.get_stdses(basises)
             self.create_p(self.omega,basises,self.points,stdses,save_reduced=True)
@@ -1826,7 +1834,7 @@ class all_information:
         plotter=Plotter('bernyterny')
         points=self.convert_points_to_new_projection('berny',self.points)
         end_points=self.get_end_points('berny')
-        point_labels={'Initial':[0,1],'b':[1,2],'c':[2,3]}
+        point_labels={'Initial':[0,1]}
         plotter.berny_testing(data,points,end_points,point_labels)
 
     def random_initialise(self,n):
@@ -1849,45 +1857,75 @@ class all_information:
         return x_t
 
     def get_end_points(self,method):
-        points=self.convert_points_to_new_projection('berny',self.points)
-        end_points=self.convert_points_to_new_projection('berny',self.end_points)
-        lines=end_points-points
-        constraint=self.normal_vectors[0][:3]
-        end_points_t=np.empty((points.shape[0],points.shape[1]+1))
-        for i in range(len(self.points)):
-            start=np.append(points[i],100-np.sum(points[i]))
-            delta=np.append(lines[i],-np.sum(lines[i]))
-            distance_to_boundary=-start/delta
-            mindist=99999
-            for j in range(len(start)):
-                if delta[j] < 0:
-                    if distance_to_boundary[j]<mindist:
-                        mindist=distance_to_boundary[j]
-            end_points_t[i]=start+mindist*delta
-        return end_points_t
+        print(self.points)
+        if method == 'berny':
+            points=self.convert_points_to_new_projection('berny',self.points)
+            end_points=self.convert_points_to_new_projection('berny',self.end_points)
+            lines=end_points-points
+            constraint=self.normal_vectors[0][:3]
+            end_points_t=np.empty((points.shape[0],points.shape[1]+1))
+            for i in range(len(self.points)):
+                start=np.append(points[i],100-np.sum(points[i]))
+                delta=np.append(lines[i],-np.sum(lines[i]))
+                distance_to_boundary=-start/delta
+                mindist=99999
+                for j in range(len(start)):
+                    if delta[j] < 0:
+                        if distance_to_boundary[j]<mindist:
+                            mindist=distance_to_boundary[j]
+                end_points_t[i]=start+mindist*delta
+            return end_points_t
+        if method == 'constrained':
+            points=self.convert_to_standard_basis(self.points)
+            end_points=self.convert_to_standard_basis(self.end_points)
+            lines=end_points-points
+            end_points_t=np.empty(
+                (len(end_points),self.normal_vectors.shape[1]))
+            for n,(point,line) in enumerate(zip(points,lines)):
+                mindist=99999
+                for x,delta in zip(point,line):
+                    if delta < 0:
+                        distance=-x/delta
+                        if distance<mindist:
+                            mindist=distance
+                end_points_t[n]=point+mindist*line
+            end_points_s=end_points_t-self.contained_point
+            A=self.basis
+            end_points_s=np.einsum('ij,...j->...i',A,end_points_s)
+            return end_points_s
+
+                
 
     def convert_to_berny_basis(self,x):
-        print('hhhh',x.shape)
-        amount=x[:,:3].sum(axis=1)
-        normalised=100*x/(np.broadcast_to(amount,(4,len(x))).T)
-        return normalised[:,:2]
+        if x.ndim==2:
+            amount=x[:,:3].sum(axis=1)
+            normalised=100*x/(np.broadcast_to(amount,(4,len(x))).T)
+            return normalised[:,:2]
+        elif x.ndim==1:
+            amount=np.sum(x[:3])
+            normalised=100*x/amount
+            return normalised[:2]
+        else:
+            print('Error - lick ma balls')
 
-    def convert_f_to_new_projection(self,projection,f_values,f_locations):
+
+    def convert_f_to_new_projection(
+        self,projection,f_values,f_locations,normalise=True):
         if len(f_values)!=len(f_locations):
                print('Error number of values does not match umber of locations')
         if projection=='berny':
-            f_locations_stan=self.convert_to_standard_basis(use_omega=False,omega=f_locations)
+            f_locations_stan=self.convert_to_standard_basis(f_locations)
             f_locations_to_tern=self.convert_to_berny_basis(f_locations_stan)
-            print('Remember to test wich corners are which')
             (gridpoints_tuple,gridpoints)=self.create_grid_points()
             f=interpolate.griddata(f_locations_to_tern,f_values,gridpoints,method='cubic',fill_value=0)
+            if normalise:
+                f=f/np.sum(f)
             data=dict(zip(gridpoints_tuple,f))
             return data
-            
+
     def convert_points_to_new_projection(self,projection,points):
         if projection=='berny':
-            points_stan=self.convert_to_standard_basis(use_omega=False,omega=points)
-            print('uuu',points_stan.shape)
+            points_stan=self.convert_to_standard_basis(points)
             points_to_tern=self.convert_to_berny_basis(points_stan)
             return points_to_tern
 
@@ -1907,7 +1945,23 @@ class all_information:
     def get_score(self,method):
         if method=='d_g_mu':
             mean=self.get_mean(f=self.values)
-        return np.linalg.norm(mean-self.goal)
+            return np.linalg.norm(mean-self.goal)
+        if method=='mean_mode_variance':
+            values=self.values
+            summ=np.sum(values)
+            if summ!=0:
+                mean=self.get_mean(f=values)
+                mean_score=np.linalg.norm(mean-self.goal)
+                mode=self.get_max(f=values)
+                mode_score=np.linalg.norm(mode-self.goal)
+                var=self.f_score(values,method='variance')
+            else:
+                print('Error p 0')
+                mean_score=0
+                mode_score=0
+                var=0
+            return np.array([mean_score,mode_score,var])
+
 
     def choose_next_best_point_a(self,power):
         #chooses next best as a sample from omega
@@ -1918,31 +1972,222 @@ class all_information:
         return next_point
 
     def choose_next_best_point_b(
-            self,num_points,num_targets,angular_equivalence,increment,
-            considered_fraction):
+            self,num_points,num_targets,angular_equivalence,ex_sigma,delta,
+            num_chosen=1,exclusion=10,allow_reduce=True,
+            use_reduced_omega=False):
         dim = self.constrained_dim
         values=self.values
-        self.get_points_targets_for_exploration_evaluation_b(
-            num_points=num_points,num_targets=num_targets)
-        weights=self.weight_points_for_exploration_evaluation(
-            cutoff = angular_equivalence)
-        change_score = self.expected_gain_in_info()
-        expected_score=np.sum(weights*change_score,axis=0)
-        sorted_trial_points=self.exploration_points[expected_score.argsort()]
-        return sorted_trial_points[-1]
+        if use_reduced_omega:
+            values=self.values_reduced
+            self.values=self.values_reduced
+            self.omega=self.omega_reduced
+        if self.get_points_targets_for_exploration_evaluation_b(
+                num_points=num_points,num_targets=num_targets,
+                allow_reduce=allow_reduce):
+            weights=self.weight_points_for_exploration_evaluation(
+                cutoff = angular_equivalence)
+            change_score = self.expected_gain_in_info_b(ex_sigma,delta)
+            expected_score=np.sum(weights*change_score,axis=0)
+            sorted_trial_points=self.exploration_points[expected_score.argsort()]
+            if num_chosen == 1:
+                return sorted_trial_points[-1]
+            else:
+                chosen_points=np.empty((0,dim))
+                chosen_points=np.append(chosen_points,[sorted_trial_points[-1]],axis=0)
+                choosing=True
+                i=-2
+                while(choosing):
+                    outside=True
+                    p=sorted_trial_points[i]
+                    for n,point in enumerate(chosen_points):
+                        if np.linalg.norm(p-point)<exclusion:
+                            outside=False
+                    if outside:
+                        chosen_points=np.append(chosen_points,[p],axis=0)
+                        if len(chosen_points)==num_chosen:
+                            choosing=False
+                    i=i-1
+                return chosen_points
+        else:
+            return None
+
+    def choose_next_best_points_sphere(self,centre,n,allowed_angle):
+        points=self.get_points_on_sphere(n,allowed_angle)
+        f=self.values/np.sum(self.values)
+        print(self.f_score(f,method='variance'),'fff')
+        #radius=np.sqrt(self.f_score(f,method='variance'))*0.01
+        radius=1.5
+        points=points*radius
+        if centre == 'mean':
+            centre=self.get_mean(f=f)
+        elif centre == 'max':
+            centre=self.get_max(f=f)
+        else:
+            print('Are you sure custom centre is valid?')
+        points=points+centre
+        return points
+        
+
+    def get_points_on_sphere(self,n,allowed_angle):
+        success = False
+        attempts=0
+        d=self.constrained_dim
+        A=self.basis
+        while not success:
+            print(attempts)
+            tchosen_points=np.empty((0,d))
+            exit=False
+            single_attempts=0
+            while not exit:
+                x=np.empty(d)
+                for m in range(d):
+                    x[m]=random.uniform(-1,1)
+                x=x/np.linalg.norm(x)
+                if len(tchosen_points)>0:
+                    minangle=360
+                    for y in tchosen_points:
+                        angle=np.degrees(np.arccos(np.dot(x,y)))
+                        if angle<minangle:
+                            minangle=angle
+                    if minangle>allowed_angle:
+                        print(minangle,'a')
+                        tchosen_points=np.append(
+                            tchosen_points,[x],axis=0)
+                        if len(tchosen_points)==n:
+                            success=True
+                            exit=True
+                            chosen_points=tchosen_points
+                else:
+                    tchosen_points=np.append(tchosen_points,[x],axis=0)
+                single_attempts=single_attempts+1
+                if single_attempts>10000:
+                    exit=True
+            attempts=attempts+1
+            if attempts>10000:
+                print('Error cant find point')
+                return False
+        return chosen_points
+
+
+
+
+
+
+
 
     def get_points_targets_for_exploration_evaluation_b(
-        self,num_points=10,num_targets=100):
+        self,num_points=10,num_targets=100,allow_reduce=True):
         p=self.values
+        count_non_zero=np.count_nonzero(p!=0)
+        if count_non_zero<num_points+num_targets:
+            if allow_reduce:
+                print('Minor error, num point,target has been reduced as',
+                      ' not enough gridpoints')
+                if count_non_zero>10:
+                    num_points=int(np.floor(count_non_zero*0.1))
+                    num_targets=int(np.floor(count_non_zero*0.9))
+                else:
+                    return False
+            else:
+                return False
         p=p/np.sum(p)
         points=self.omega[np.random.choice(
             range(len(self.omega)),p=p,size=num_points+num_targets,
-            replace=False)
+            replace=False)]
+        np.random.shuffle(points)
         self.exploration_points = points[:num_points]
         self.exploration_targets = points[num_points:]
+        return True
 
-    def sample_next_point(self,sigma,power=1):
-        point=self.choose_next_best_point_a(power)
+    def expected_gain_in_info_b(self,ex_sigma,delta):
+        #get basises
+        n = len(self.exploration_points)
+        m = len(self.exploration_targets)
+        l = self.omega.shape[0]
+        o = self.omega.shape[1]
+        samples_broad=np.broadcast_to(self.exploration_points,(m,n,o))
+        targets_broad=np.swapaxes(
+            np.broadcast_to(self.exploration_targets,(n,m,o)),0,1)
+        estimated_dirs=targets_broad-samples_broad
+        basises=np.empty((m,n,o,o))
+        for i,ii in enumerate(estimated_dirs):
+            for j,jj in enumerate(ii):
+                basises[i][j]=self.get_basis(jj)
+
+        #get ax
+        a_broad=np.broadcast_to(self.exploration_points,(l,n,o))
+        x_broad=np.swapaxes(np.broadcast_to(self.omega,(n,l,o)),0,1)
+        ax = x_broad-a_broad
+
+        #get ax perp and parallel
+        ax_prime=np.einsum('ijkl,mjl->ijmk',basises,ax)
+
+        #scale sigmas
+        scaled_std=ex_sigma*ax_prime[:,:,:,0]
+        scaled_std=np.moveaxis(np.broadcast_to(scaled_std,(o-1,m,n,l)),0,3)
+        calculate_indices=np.where(scaled_std>0)
+        std_to_calc=scaled_std[calculate_indices]
+    
+
+        #get bounds 
+        ax_parallel_to_calc=ax_prime[:,:,:,1:][calculate_indices]
+        lower = ax_parallel_to_calc-delta
+        upper = ax_parallel_to_calc+delta
+
+        #compute cff's
+        out = np.empty(lower.shape)
+        CDF_lower=scipy.stats.norm(loc=0,scale=std_to_calc).cdf(lower)
+        CDF_upper=scipy.stats.norm(loc=0,scale=std_to_calc).cdf(upper)
+
+        #get p
+        p_from_calc=CDF_upper-CDF_lower
+        p=np.zeros(scaled_std.shape)
+        p[calculate_indices]=p_from_calc
+
+        #Normalisation?
+        #normalisation=np.moveaxis(
+        #    np.broadcast_to(np.sum(p,axis=2),(l,m,n,o-1)),0,2)
+        #p=p/normalisation
+
+        #product over orthogonal directions
+        p=np.prod(p,axis=3)
+
+        #Get original score
+        f=self.values
+        original_score = self.f_score(f,method='variance')
+
+        #get final score
+        f_broad=np.broadcast_to(f,(m,n,l))
+        post_p = f_broad*p
+        #post_p=post_p/np.moveaxis(
+        #    np.broadcast_to(np.sum(post_p,axis=2),(l,m,n)),0,2)
+        post_score=np.empty((post_p.shape[0],post_p.shape[1]))
+        for n,i in enumerate(post_p):
+            for m,j in enumerate(i):
+                summ=np.sum(j)
+                if summ!=0:
+                    j=j/summ
+                    post_score[n][m]=self.f_score(j,method='variance')
+                else:
+                    print('hey')
+                    post_score[n][n]=0
+        change_score=original_score-post_score
+        return change_score
+
+    def sample_next_point(
+            self,method,sigma,power=None,num_points=0,num_targets=0,delta=0,
+            angular_equivalence=0,increment=1,considered_fraction=0.2,scale=0):
+        if method == 'a':
+            point=self.choose_next_best_point_a(power)
+        elif method == 'b':
+            point=self.choose_next_best_point_b(
+                num_points,num_targets,angular_equivalence,increment,
+                considered_fraction,sigma[0,0],delta)
+        else:
+            print('Unknown method')
+        if point is None:
+            print('Error, got to close')
+            return False
         if np.all(point == self.goal):
             return False
         self.add_point(point)
@@ -1955,7 +2200,7 @@ class all_information:
             (len(point_indexes),self.lines.shape[1],self.lines.shape[1]))
         points=np.empty((len(point_indexes),self.lines.shape[1]))
         for i,index in enumerate(point_indexes):
-            basises[i]=self.get_basis(self.points[index],self.lines[index])
+            basises[i]=self.get_basis(self.lines[index])
             points[i]=self.points[index]
 
         self.set_sigma_simulated(sigma,scale)
@@ -1965,19 +2210,285 @@ class all_information:
 
     def sample_points_test(
             self,number_samples,normal_vectors,contained_point,cube_size,sigma,
-            scale,delta,power):
-        self.setup(normal_vectors,contained_point,cube_size,sigma)
+            scale,delta,power,plot_process=False):
+        num_points=10
+        num_targets=100
+        angular_equivalence=10
+        increment=1
+        considered_fraction=0.2
+        method='b'
+        self.setup(
+            normal_vectors,contained_point,cube_size,sigma,
+            create_heatmap=plot_process)
         self.random_initialise(1)
         self.make_p_gaussian(sigma,scale,delta)
         score=np.empty((number_samples+1))
         score[0]=self.get_score('d_g_mu')
+        if plot_process:
+            plotter=visualise_square()
+            plotter.process_fig()
+            self.make_heatmap_constrained()
+            self.create_plot_lines()
+            plotter.plot_heatmap(
+                self.heatmap,self.xlim[0],self.xlim[1],self.ylim[0],
+                self.ylim[1],use_axs=[0,0],show=False)
+
         for i in range(number_samples):
-            if self.sample_next_point(sigma,power):
+            unsuc = self.sample_next_point(
+                method,sigma,power,num_points,num_targets,angular_equivalence,
+                increment,considered_fraction,delta)
+            if unsuc:
+                if plot_process:
+                    use_axs=[0,0]
+                    if i < 3:
+                        use_axs=[0,i]
+                    else:
+                        use_axs[1,i-3]
+                    plotter.plot_scatter(
+                    None,np.array([self.points[-1]]),show=False,lim=False,
+                    marker='x',c='green',label='next chosen point',
+                    use_axs=use_axs)
                 self.update_values([-1],sigma,scale,delta)
+                if plot_process:
+                    use_axs=[0,0]
+                    if i < 2:
+                        use_axs=[0,i+1]
+                    elif i>=5:
+                        use_axs[1,i-2]
+                    self.plot_scatter(
+                        None,np.array([self.points[-1]]),show=False,lim=False,
+                        marker='x',c='green',label='next chosen point')
                 score[i+1]=self.get_score('d_g_mu')
             else:
                 score[i+1]=0
         return score
+
+    def plot_small_balls(self,means,sigmas,projection='None'):
+        values = np.zeros(self.omega.shape[0])
+        for mean,sigma in zip(means,sigmas):
+            values = values + scipy.stats.multivariate_normal.pdf(
+                self.omega,mean=mean,cov=sigma)
+        if projection == 'None':
+            heatmap=self.heatmap
+            for point,value in zip(self.omega,values):
+                i=point[0]-self.xlim[0]
+                j=point[1]-self.ylim[0]
+                heatmap[j,i]=value
+            plotter=visualise_square()
+            plotter.plot_heatmap(
+                heatmap,self.xlim[0],self.xlim[1],self.ylim[0],self.ylim[1])
+        if projection == 'berny':
+            plotter=Plotter('bernyterny')
+            data=self.convert_f_to_new_projection('berny',values,self.omega)
+            plotter.small_balls_heat_fig(data)
+
+
+    def make_merged_ball_values(self,mean,sigma):
+        values = scipy.stats.multivariate_normal.pdf(
+            self.omega,mean=mean,cov=sigma)
+        return values
+
+    def plot_merged_ball(
+            self,mean,sigma,small_means,point_labels,mean_label,
+            projection='None'):
+        values=self.make_merged_ball_values(mean,sigma)
+        if projection == 'None':
+            heatmap=self.heatmap
+            for point,value in zip(self.omega,values):
+                i=point[0]-self.xlim[0]
+                j=point[1]-self.ylim[0]
+                heatmap[j,i]=value
+            plotter=visualise_square()
+            plotter.plot_heatmap(
+                heatmap,self.xlim[0],self.xlim[1],self.ylim[0],self.ylim[1])
+        if projection == 'berny':
+
+            small_means=self.convert_points_to_new_projection(
+                'berny',small_means)
+            mean=self.convert_points_to_new_projection(
+                'berny',np.array([mean]))[0]
+            plotter=Plotter('bernyterny')
+            data=self.convert_f_to_new_projection('berny',values,self.omega)
+            plotter.merged_balls(data,mean,small_means,point_labels,
+                                mean_label)
+
+    def convert_point_to_constrained(self,point):
+        point_s=point-self.contained_point
+        print(point_s,'aaa')
+        point=np.einsum('ij,j',self.basis,point_s)
+        return point
+
+    def add_first_sample(self,point_s,mean,sigma):
+        point_s=point_s-self.contained_point
+        point=np.einsum('ij,j',self.basis,point_s)
+        distance=np.linalg.norm(point-mean)
+        sigma=np.diag(sigma/distance)
+        self.points=np.broadcast_to(point,(1,self.constrained_dim))
+        self.lines=np.broadcast_to(point-mean,(1,self.constrained_dim))
+        self.sigmas=np.broadcast_to(
+            sigma,(1,self.constrained_dim,self.constrained_dim))
+        self.end_points=self.points+self.lines
+        return sigma
+
+    def add_line(self,line):
+        self.lines = np.vstack([self.lines,line])
+
+    def add_sigma(self,sigma):
+        self.sigmas = np.vstack((self.sigmas,[sigma]))
+
+    def calculate_p_from_samples(self,delta):
+        basises=np.empty((
+            self.lines.shape[0],self.lines.shape[1],self.lines.shape[1]))
+        for i in range(len(self.lines)):
+            basises[i]=self.get_basis(self.lines[i])
+        stdses=self.get_stdses(basises)
+        self.create_p(self.omega,basises,self.points,stdses,delta=delta)
+
+    def plot_p(self,projection='None'):
+        self.make_heatmap_constrained()
+        plotter=visualise_square()
+        if projection == 'None':
+            plotter.plot_heatmap(
+                self.heatmap,self.xlim[0],self.xlim[1],self.ylim[0],
+                self.ylim[1])
+
+    def plot_merged_ball_p(self,mean,sigma,delta,projection='None'):
+        ball_values=self.make_merged_ball_values(mean,sigma)
+        #ball_values=ball_values/(np.sum(ball_values))
+        values=self.values
+        #values=values/np.sum(values)
+        heatmap=self.heatmap
+        for point,value,ball_value in zip(self.omega,values,ball_values):
+            i=point[0]-self.xlim[0]
+            j=point[1]-self.ylim[0]
+            heatmap[j,i]=value+ball_value
+        if projection == 'None':
+            plotter=visualise_square()
+            plotter.plot_heatmap(
+                heatmap,self.xlim[0],self.xlim[1],self.ylim[0],self.ylim[1])
+
+    def sample_next_batch(
+            self,method,batchsize,sigma,scale,delta,num_points=None,
+            num_targets=None,angular_equivalence=None,num_chosen=None,
+            exclusion=None,plot_process=False,rietveld_closest=False):
+        next_points=np.empty((batchsize,self.constrained_dim))
+        if plot_process:
+            goal_t=self.convert_points_to_new_projection('berny',self.goal)
+            values=self.values/np.sum(self.values)
+            data_t=self.convert_f_to_new_projection('berny',values,self.omega)
+            plotter=Plotter("bernyterny")
+            plotter.explore_batch(goal_t,data_t)
+        if method == 'lastline':
+            point=self.points[-1]
+            endpoint=self.get_end_points('constrained')[-1]
+            v=endpoint-point
+            distance=np.linalg.norm(v)
+            for i in range(1,batchsize):
+                next_points[i-1]=point+i/(batchsize)*v
+            next_points[batchsize-1]=endpoint
+        if method=='pure_explore':
+            next_points=self.choose_next_best_point_b(
+                num_points,num_targets,angular_equivalence,sigma[0][0],
+                delta,num_chosen=batchsize,exclusion=exclusion,
+                allow_reduce=False,use_reduced_omega=True)
+        if next_points is None:
+            return False
+        for point in next_points:
+            if np.all(point==self.goal):
+                return False
+        start=len(self.points)
+        stop=start+batchsize
+        self.points=np.append(self.points,next_points,axis=0)
+        for i in range(start,stop):
+            self.create_line_from_sample_constrained(
+                self.constrained_dim,i,method='use_sigma',sigma=sigma)
+        point_indexes=range(start,stop)
+        if not rietveld_closest:
+            self.update_values(point_indexes,sigma,scale,delta)
+        else:
+            mindist=9999
+            closestPointIndex=None
+            for n,point in enumerate(next_points):
+                dist=np.linalg.norm(point-self.goal)
+                if dist<mindist:
+                    mindist=dist
+                    closestPointIndex=n
+            closest_point_index=(len(self.points)-len(next_points)
+                                 +closestPointIndex)
+            self.update_values([closest_point_index],sigma,scale,delta)
+            self.chosen_point=self.points[closest_point_index]
+
+        if plot_process:
+            pot_points=self.convert_points_to_new_projection(
+                'berny',self.exploration_points)
+            pot_targets=self.convert_points_to_new_projection(
+                'berny',self.exploration_targets)
+            points_t=self.convert_points_to_new_projection(
+                'berny',self.points)
+            end_points_t=self.get_end_points('berny')
+            values=self.values/np.sum(self.values)
+            post_data=self.convert_f_to_new_projection(
+                'berny',values,self.omega)
+            plotter.explore_post_data(
+                pot_points,pot_targets,points_t,end_points_t,post_data)
+            plotter.explore_plot("../figures/processfigures/explore")
+        return True
+
+    def revert_to_initial(self):
+        self.points=self.points[0:1]
+        self.lines=self.lines[0:1]
+        self.end_points=self.end_points[0:1]
+
+    def next_sample_test(self,sigma,scale,delta,num_lines):
+        self.omega=self.omega_reduced
+        self.values=self.values_reduced
+        values_save=self.values
+        scores=np.empty((len(self.omega),3))
+        #scores=np.empty((len(self.values),3))
+        tot=len(self.omega)
+        for n,point in enumerate(self.omega):
+            if not np.all(point == self.goal):
+                print(tot-n)
+                self.points=np.append(self.points,[point],axis=0)
+                score=np.empty((num_lines,3))
+                for i in range(num_lines):
+                    self.create_line_from_sample_constrained(
+                        self.constrained_dim,1,method='use_sigma',sigma=sigma)
+                    self.update_values([1],sigma,scale,delta)
+                    score[i]=self.get_score('mean_mode_variance')
+                    self.values=values_save
+                    self.lines=self.lines[0:1]
+                    self.end_points=self.end_points[0:1]
+                scores[n]=np.mean(score,axis=0)
+                self.points=self.points[0:1]
+            else:
+                scores[n]=[0,0,0]
+        self.end_points=self.get_end_points('constrained')
+        self.create_plot_lines()
+        plotter=visualise_square()
+        self.heatmap=1+self.heatmap
+        heatmap_save=self.heatmap
+        meanscore=scores[:,0]/np.amax(scores[:,0])
+        self.make_heatmap_constrained(meanscore,self.omega)
+        plotter.next_sample_fig(
+            self.heatmap,self.xlim,self.ylim,self.points,self.plot2d_lines,
+            self.goal,"../figures/nextsampletest/mean.png")
+        self.heatmap=heatmap_save
+        meanscore=scores[:,1]/np.amax(scores[:,1])
+        self.make_heatmap_constrained(meanscore,self.omega)
+        plotter.next_sample_fig(
+            self.heatmap,self.xlim,self.ylim,self.points,self.plot2d_lines,
+            self.goal,"../figures/nextsampletest/max.png")
+        self.heatmap=heatmap_save
+        meanscore=scores[:,2]/np.amax(scores[:,2])
+        self.make_heatmap_constrained(meanscore,self.omega)
+        plotter.next_sample_fig(
+            self.heatmap,self.xlim,self.ylim,self.points,self.plot2d_lines,
+            self.goal,"../figures/nextsampletest/var.png")
+            
+
+
+
 
 
 
