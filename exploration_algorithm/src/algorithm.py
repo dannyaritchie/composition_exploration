@@ -147,10 +147,7 @@ class all_information:
 
     def add_point_in_ball(self):
         x = self.points[-1]
-        print('aa')
-        print(x)
         y = x + [-6,4,2]
-        print(y)
         self.points = np.append(self.points,np.array([y]),axis=0)
 
     def add_line_from_ball_through_sample(self,form):
@@ -204,7 +201,6 @@ class all_information:
             if printid:
                 print('here',ab)
                 print(line)
-                print(point)
                 print(min_steps,'m')
             self.end_points = np.append(self.end_points,[final_point],axis=0)
 
@@ -884,6 +880,9 @@ class all_information:
         if method == 'variance':
             mean=self.get_mean(fs)
             result=np.sum(fs*np.linalg.norm(mean-self.omega))
+        if method=='max_variance':
+            centre=self.get_max(fs)
+            result=np.sum(fs*np.linalg.norm(centre-self.omega))
 
         return result
 
@@ -1146,7 +1145,6 @@ class all_information:
             jmax=np.amax(omega[:,1])
             imin=np.amin(omega[:,0])
             imax=np.amax(omega[:,0])
-            self.heatmap=np.zeros((jmax-jmin+1,imax-imin+1))
             self.xlim=[imin,imax]
             self.ylim=[jmin,jmax]
         #print("Number of grid points = ",omega.shape)
@@ -1215,7 +1213,6 @@ class all_information:
         if method == 'default':
             sigma=self.simulate_sample(method=method)
         stds = np.empty((len(x)))
-        print(sigma)
         for i in range(len(x)):
             stds[i] = np.einsum('k,kl,l',x[i],sigma,x[i])
         perp_vec=np.zeros((dim))
@@ -1229,6 +1226,7 @@ class all_information:
 
     def create_plot_lines(self):
         self.plot2d_lines=np.empty((len(self.lines),2,2))
+        self.end_points=self.get_end_points('constrained')
         if len(self.end_points)==len(self.points):
             for i in range(len(self.lines)):
                 self.plot2d_lines[i]=[self.points[i],self.end_points[i]]
@@ -1613,7 +1611,6 @@ class all_information:
         pos=np.empty(X.shape+(2,))
         pos[:,:,0]=X
         pos[:,:,1]=Y
-        print('aaa',pos.shape)
         omega=self.create_omega(dim=3,increment=1)
         print(omega.shape)
         n = 3
@@ -1654,6 +1651,8 @@ class all_information:
         self.values=np.array([1]*len(omega))
 
     def make_heatmap_constrained(self,values=None,omega=None):
+        self.heatmap=np.zeros(
+            (self.ylim[1]-self.ylim[0]+1,self.xlim[1]-self.xlim[0]+1))
         if values is None:
             values=self.values
         if omega is None:
@@ -1662,6 +1661,7 @@ class all_information:
             i=point[0]-self.xlim[0]
             j=point[1]-self.ylim[0]
             self.heatmap[j,i]=value
+        return self.heatmap
 
     def heatmap_test(
         self,normal_vectors,cube_size,contained_point,sigma,method='p'):
@@ -1701,6 +1701,9 @@ class all_information:
         plotter.test_fig(self.goal,self.points,self.plot2d_lines,self.heatmap,self.xlim,self.ylim,self.omega,mean)
 
     def make_p_gaussian(self,sigma,scale,delta,save_reduced=False):
+        self.sigma=sigma
+        self.scale=scale
+        self.delta=delta
         basises=np.empty((self.lines.shape[0],self.lines.shape[1],self.lines.shape[1]))
         for i in range(len(self.lines)):
             basises[i]=self.get_basis(self.lines[i])
@@ -1764,7 +1767,7 @@ class all_information:
         ax=omega_broad-samples_broad
         orth_direction_broad=np.broadcast_to(basises[:,0,:],(o,n,dim))
         ax_perp=np.sum(ax*orth_direction_broad,axis=2)
-        selected_indexes=np.all(ax_perp >0 ,axis=1)
+        selected_indexes=np.all(ax_perp >0,axis=1)
         ax_perp_reduced=ax_perp[selected_indexes]
         ax_reduced=ax[selected_indexes]
         o=len(ax_reduced)
@@ -1773,20 +1776,24 @@ class all_information:
         ax_perp_broad=np.moveaxis(np.broadcast_to(ax_perp_reduced,(dim,o,n)),0,2)
         #ax_proj=np.zeros((o,n,dim))
         #np.divide(ax_reduced,ax_perp_broad,where=ax_perp_broad!=0,out=ax_proj)
-        parallel_directions=basises[:,1:]
+        parallel_directions=basises[:,1:,:]
         ax_parallel=np.einsum('...id,ikd->...ik',ax_reduced,parallel_directions)
 
         #scale sigmas
         scaled_std=np.einsum('...i,k...->k...i',stdses,ax_perp_reduced)
 
-        lower = ax_parallel-delta
-        CDF_lower=scipy.stats.norm(loc=0,scale=scaled_std).cdf(lower)
-        upper = ax_parallel+delta
-        CDF_upper=scipy.stats.norm(loc=0,scale=scaled_std).cdf(upper)
-        p_reduced=CDF_upper-CDF_lower
+        #lower = ax_parallel-delta
+        #CDF_lower=scipy.stats.norm(loc=0,scale=scaled_std).cdf(lower)
+        #upper = ax_parallel+delta
+        #CDF_upper=scipy.stats.norm(loc=0,scale=scaled_std).cdf(upper)
+        #p_reduced=CDF_upper-CDF_lower
+        p_reduced=scipy.stats.norm.pdf(ax_parallel,loc=0,scale=scaled_std)
+        for i in p_reduced[:,0,0]:
+            if i <0:
+                print(i)
         #normalisation?
-        #normalisation=np.sum(p_reduced,axis=0)
-        #p_reduced=p_reduced/np.broadcast_to(normalisation,p_reduced.shape)
+        normalisation=np.sum(p_reduced,axis=0)
+        p_reduced=p_reduced/np.broadcast_to(normalisation,p_reduced.shape)
         p_reduced=np.prod(p_reduced,axis=2)
         p_reduced=np.prod(p_reduced,axis=1)
         p=np.zeros((len(omega)))
@@ -1856,8 +1863,26 @@ class all_information:
             x_t[n]=x_tt
         return x_t
 
+    def get_estimated_known_composition(self,point):
+        print(point)
+        point_s=self.convert_to_standard_basis(point)
+        goal_s=self.convert_to_standard_basis(self.goal)
+        line = goal_s-point_s
+        mindist=9999
+        end_point=None
+        for x,delta in zip(goal_s,line):
+            if delta<0:
+                distance=-x/delta
+                if distance<mindist:
+                    mindist=distance
+        est_known=goal_s+mindist/2*line
+        return est_known
+        
+
+
+
+        
     def get_end_points(self,method):
-        print(self.points)
         if method == 'berny':
             points=self.convert_points_to_new_projection('berny',self.points)
             end_points=self.convert_points_to_new_projection('berny',self.end_points)
@@ -1920,6 +1945,7 @@ class all_information:
             f=interpolate.griddata(f_locations_to_tern,f_values,gridpoints,method='cubic',fill_value=0)
             if normalise:
                 f=f/np.sum(f)
+            f[f<0]=0
             data=dict(zip(gridpoints_tuple,f))
             return data
 
@@ -2011,13 +2037,53 @@ class all_information:
         else:
             return None
 
-    def choose_next_best_points_sphere(self,centre,n,allowed_angle):
+    def choose_next_best_points_sphere(
+            self,centre,n,allowed_angle,radius_reduction=None,slope=None,
+            intercept=None,set_radius=None):
+        points=self.get_points_on_sphere(n-1,allowed_angle)
+        f=self.values/np.sum(self.values)
+        std=np.sqrt(self.f_score(f,method='variance'))
+        radius=None
+        if radius_reduction is not None:
+            radius=std/radius_reduction
+        elif slope is not None:
+            radius=slope*std+intercept
+        elif set_radius is not None:
+            radius=set_radius
+        else:
+            print('Error: unknown radius method')
+        #radius=1.5
+        points=points*radius
+        if centre == 'mean':
+            centre=self.get_mean(f=f)
+        elif centre == 'max':
+            centre=self.get_max(f=f)
+        else:
+            print('Are you sure custom centre is valid?')
+        points=points+centre
+        points=np.append(points,[centre],axis=0)
+        return points
+        
+    def eval_next_best_points_sphere_radius(
+            self,centre,n,allowed_angle,radii_reduction=None,radii=None,
+            custom_radius=None,slope=None,intercept=None):
         points=self.get_points_on_sphere(n,allowed_angle)
         f=self.values/np.sum(self.values)
-        print(self.f_score(f,method='variance'),'fff')
-        #radius=np.sqrt(self.f_score(f,method='variance'))*0.01
-        radius=1.5
-        points=points*radius
+        std=np.sqrt(self.f_score(f,method='variance'))
+        radiuses=None
+        if custom_radius is not None:
+            radiuses=[]
+            radiuses.append(radii)
+            radiuses.append(std/radii_reduction)
+            radiuses.append(slope*std+intercept)
+            radiuses=np.array(radiuses)
+        elif radii_reduction is not None:
+            radiuses=(std/radii_reduction)
+        elif radii is not None:
+            radiuses=radii
+        else:
+            print('Error, no radius method')
+        points=np.einsum('ij,...->...ij',points,radiuses)
         if centre == 'mean':
             centre=self.get_mean(f=f)
         elif centre == 'max':
@@ -2027,6 +2093,14 @@ class all_information:
         points=points+centre
         return points
         
+        '''
+    def eval_best_radius(
+            self,centre,n,allowed_angle,radii,num_trials=100):
+        distances=np.empty((num_trials,0,0))
+        for i in range(num_trials):
+            points=self.get_points_on_sphere(n,allowed_angle)
+            points=np.einsum('ij,...->...ij',points,radii)
+        '''
 
     def get_points_on_sphere(self,n,allowed_angle):
         success = False
@@ -2034,7 +2108,6 @@ class all_information:
         d=self.constrained_dim
         A=self.basis
         while not success:
-            print(attempts)
             tchosen_points=np.empty((0,d))
             exit=False
             single_attempts=0
@@ -2050,7 +2123,6 @@ class all_information:
                         if angle<minangle:
                             minangle=angle
                     if minangle>allowed_angle:
-                        print(minangle,'a')
                         tchosen_points=np.append(
                             tchosen_points,[x],axis=0)
                         if len(tchosen_points)==n:
@@ -2060,7 +2132,7 @@ class all_information:
                 else:
                     tchosen_points=np.append(tchosen_points,[x],axis=0)
                 single_attempts=single_attempts+1
-                if single_attempts>10000:
+                if single_attempts>1000:
                     exit=True
             attempts=attempts+1
             if attempts>10000:
@@ -2145,9 +2217,9 @@ class all_information:
         p[calculate_indices]=p_from_calc
 
         #Normalisation?
-        #normalisation=np.moveaxis(
-        #    np.broadcast_to(np.sum(p,axis=2),(l,m,n,o-1)),0,2)
-        #p=p/normalisation
+        normalisation=np.moveaxis(
+            np.broadcast_to(np.sum(p,axis=2),(l,m,n,o-1)),0,2)
+        p=p/normalisation
 
         #product over orthogonal directions
         p=np.prod(p,axis=3)
@@ -2314,21 +2386,20 @@ class all_information:
 
     def convert_point_to_constrained(self,point):
         point_s=point-self.contained_point
-        print(point_s,'aaa')
         point=np.einsum('ij,j',self.basis,point_s)
         return point
 
-    def add_first_sample(self,point_s,mean,sigma):
+    def add_first_sample(self,point_s,mean,osigma):
         point_s=point_s-self.contained_point
         point=np.einsum('ij,j',self.basis,point_s)
         distance=np.linalg.norm(point-mean)
-        sigma=np.diag(sigma/distance)
+        sigma=np.diag(osigma/distance)
         self.points=np.broadcast_to(point,(1,self.constrained_dim))
         self.lines=np.broadcast_to(point-mean,(1,self.constrained_dim))
         self.sigmas=np.broadcast_to(
             sigma,(1,self.constrained_dim,self.constrained_dim))
         self.end_points=self.points+self.lines
-        return sigma
+        return np.mean(osigma/distance)
 
     def add_line(self,line):
         self.lines = np.vstack([self.lines,line])
@@ -2336,13 +2407,17 @@ class all_information:
     def add_sigma(self,sigma):
         self.sigmas = np.vstack((self.sigmas,[sigma]))
 
-    def calculate_p_from_samples(self,delta):
+    def calculate_p_from_samples(self,delta,scale):
         basises=np.empty((
             self.lines.shape[0],self.lines.shape[1],self.lines.shape[1]))
         for i in range(len(self.lines)):
             basises[i]=self.get_basis(self.lines[i])
         stdses=self.get_stdses(basises)
+        stdses*=scale
         self.create_p(self.omega,basises,self.points,stdses,delta=delta)
+        self.sigma=self.sigmas[0]
+        self.delta=delta
+        self.scale=scale
 
     def plot_p(self,projection='None'):
         self.make_heatmap_constrained()
@@ -2368,55 +2443,61 @@ class all_information:
                 heatmap,self.xlim[0],self.xlim[1],self.ylim[0],self.ylim[1])
 
     def sample_next_batch(
-            self,method,batchsize,sigma,scale,delta,num_points=None,
+            self,method,sigma,scale,delta,num_points=None,
             num_targets=None,angular_equivalence=None,num_chosen=None,
-            exclusion=None,plot_process=False,rietveld_closest=False):
-        next_points=np.empty((batchsize,self.constrained_dim))
+            exclusion=None,plot_process=False,rietveld_closest=False,
+            n_points=None,batch_size=None,return_points=False):
+
         if plot_process:
             goal_t=self.convert_points_to_new_projection('berny',self.goal)
             values=self.values/np.sum(self.values)
             data_t=self.convert_f_to_new_projection('berny',values,self.omega)
             plotter=Plotter("bernyterny")
             plotter.explore_batch(goal_t,data_t)
+
+        next_points=None
         if method == 'lastline':
+            next_points=np.empty((batch_size,self.constrained_dim))
             point=self.points[-1]
             endpoint=self.get_end_points('constrained')[-1]
             v=endpoint-point
             distance=np.linalg.norm(v)
-            for i in range(1,batchsize):
-                next_points[i-1]=point+i/(batchsize)*v
-            next_points[batchsize-1]=endpoint
-        if method=='pure_explore':
+            for i in range(1,batch_size):
+                next_points[i-1]=point+i/(batch_size)*v
+            next_points[batch_size-1]=endpoint
+        elif method=='pure_explore':
             next_points=self.choose_next_best_point_b(
                 num_points,num_targets,angular_equivalence,sigma[0][0],
-                delta,num_chosen=batchsize,exclusion=exclusion,
+                delta,num_chosen=batch_size,exclusion=exclusion,
                 allow_reduce=False,use_reduced_omega=True)
+        elif method=='provided':
+            next_points=n_points
+        else:
+            print('Error: unknown method')
+
         if next_points is None:
             return False
-        for point in next_points:
-            if np.all(point==self.goal):
-                return False
-        start=len(self.points)
-        stop=start+batchsize
-        self.points=np.append(self.points,next_points,axis=0)
-        for i in range(start,stop):
-            self.create_line_from_sample_constrained(
-                self.constrained_dim,i,method='use_sigma',sigma=sigma)
-        point_indexes=range(start,stop)
+
         if not rietveld_closest:
+            start=len(self.points)
+            self.points=np.append(self.points,next_points,axis=0)
+            stop=len(self.points)
+            for i in range(start,stop):
+                self.create_line_from_sample_constrained(
+                    self.constrained_dim,i,method='use_sigma',sigma=sigma)
+            point_indexes=range(start,stop)
             self.update_values(point_indexes,sigma,scale,delta)
         else:
-            mindist=9999
-            closestPointIndex=None
-            for n,point in enumerate(next_points):
-                dist=np.linalg.norm(point-self.goal)
-                if dist<mindist:
-                    mindist=dist
-                    closestPointIndex=n
-            closest_point_index=(len(self.points)-len(next_points)
-                                 +closestPointIndex)
-            self.update_values([closest_point_index],sigma,scale,delta)
-            self.chosen_point=self.points[closest_point_index]
+            closest_point=self.get_closest_point(next_points,index=False)
+            self.points=np.append(self.points,[closest_point],axis=0)
+            i = len(self.points)-1
+            self.create_line_from_sample_constrained(
+                self.constrained_dim,i,method='use_sigma',sigma=sigma)
+            #self.update_values([i],sigma,scale,delta)
+            self.make_p_gaussian(sigma,scale,delta)
+            self.chosen_point=closest_point
+        if return_points:
+            return next_points
 
         if plot_process:
             pot_points=self.convert_points_to_new_projection(
@@ -2432,7 +2513,42 @@ class all_information:
             plotter.explore_post_data(
                 pot_points,pot_targets,points_t,end_points_t,post_data)
             plotter.explore_plot("../figures/processfigures/explore")
+
+        for point in next_points:
+            if np.all(point==self.goal):
+                return False
         return True
+
+    def get_closest_point(self,next_points,index=True):
+            mindist=9999
+            closest_point_index=None
+            closest_point=None
+            goal=self.convert_to_standard_basis(self.goal)/self.cube_size
+            for n,point in enumerate(next_points):
+                spoint=self.convert_to_standard_basis(point)/self.cube_size
+                dist=np.linalg.norm(spoint-goal)
+                if dist<mindist:
+                    mindist=dist
+                    closest_point_index=n
+                    closest_point=point
+            if index:
+                return closest_point_index
+            else:
+                return closest_point
+
+    def get_closest_distance(self,next_points):
+        chosen_point=self.get_closest_point(next_points,index=False)
+        chosen_point=(self.convert_to_standard_basis(chosen_point)
+                      /self.cube_size)
+        goal=self.convert_to_standard_basis(self.goal)/self.cube_size
+        return np.linalg.norm(goal-chosen_point)
+
+    def get_max_individual_distance(self,next_points):
+        chosen_point=self.get_closest_point(next_points,index=False)
+        chosen_point=(self.convert_to_standard_basis(chosen_point)
+                      /self.cube_size)
+        goal=self.convert_to_standard_basis(self.goal)/self.cube_size
+        return np.abs(goal-chosen_point).max()
 
     def revert_to_initial(self):
         self.points=self.points[0:1]
@@ -2486,6 +2602,436 @@ class all_information:
             self.heatmap,self.xlim,self.ylim,self.points,self.plot2d_lines,
             self.goal,"../figures/nextsampletest/var.png")
             
+    def setup_one_batch_on_line(self,k):
+        normal_a=np.array(k['Normal a'])
+        normal_b=np.array(k['Normal b'])
+        cube_size=k['Cube size']
+        delta_param=k['Delta param']
+        scale=k['Scale']
+        batch_size=k['Batch size']
+        contained_point=np.array(k['Contained point'])
+        sigma=k['Sigma']
+        rietveld_closest=k['Rietveld closest']
+
+        con_dim=normal_a.shape[0]-2
+        delta=cube_size/delta_param
+        normal_a=normal_a/np.linalg.norm(normal_a)
+        normal_b=normal_b/np.linalg.norm(normal_b)
+        normal_vectors=np.stack((normal_a,normal_b))
+        contained_point=contained_point*cube_size/np.sum(contained_point)
+        sigma=np.diag(np.array([sigma]*con_dim))
+
+        self.setup(normal_vectors,contained_point,
+                   cube_size,sigma)
+        self.random_initialise(1)
+        self.make_p_gaussian(sigma,scale,delta)
+        self.sample_next_batch(
+            'lastline',sigma,scale,delta,batch_size=batch_size,
+            rietveld_closest=rietveld_closest)
+
+    def setup_random(self,k):
+        normal_a=np.array(k['Normal a'])
+        normal_b=np.array(k['Normal b'])
+        cube_size=k['Cube size']
+        delta_param=k['Delta param']
+        scale=k['Scale']
+        contained_point=np.array(k['Contained point'])
+        sigma=k['Sigma']
+        max_points=k['Max points']
+
+        num_points=random.randrange(2,max_points+1)
+        con_dim=normal_a.shape[0]-2
+        delta=cube_size/delta_param
+        normal_a=normal_a/np.linalg.norm(normal_a)
+        normal_b=normal_b/np.linalg.norm(normal_b)
+        normal_vectors=np.stack((normal_a,normal_b))
+        contained_point=contained_point*cube_size/np.sum(contained_point)
+        sigma=np.diag(np.array([sigma]*con_dim))
+
+        self.setup(normal_vectors,contained_point,
+                   cube_size,sigma)
+        self.random_initialise(num_points)
+        self.make_p_gaussian(sigma,scale,delta)
+
+    def setup_n_batches_recording(self,k):
+        normal_a=np.array(k['Normal a'])
+        normal_b=np.array(k['Normal b'])
+        cube_size=k['Cube size']
+        delta_param=k['Delta param']
+        scale=k['Scale']
+        contained_point=np.array(k['Contained point'])
+        sigma=k['Sigma']
+        rietveld_closest=k['Rietveld closest']
+        num_batches=k['Number of batches']
+
+        slope=k.get('Slope')
+        intercept=k.get('Intercept')
+        radius=k.get('Radius')
+        centre=k['Centre']
+        batch_size=k['Batch size']
+        min_angle=k['Min angle']
+
+        con_dim=normal_a.shape[0]-2
+        delta=cube_size/delta_param
+        normal_a=normal_a/np.linalg.norm(normal_a)
+        normal_b=normal_b/np.linalg.norm(normal_b)
+        normal_vectors=np.stack((normal_a,normal_b))
+        contained_point=contained_point*cube_size/np.sum(contained_point)
+        sigma=np.diag(np.array([sigma]*con_dim))
+
+        self.closest_distances=np.zeros(num_batches)
+        self.max_individual_distances=np.zeros(num_batches)
+
+        self.setup(normal_vectors,contained_point,
+                   cube_size,sigma)
+        self.random_initialise(1)
+        self.make_p_gaussian(sigma,scale,delta)
+        self.sample_next_batch(
+            'lastline',sigma,scale,delta,batch_size=batch_size,
+            rietveld_closest=rietveld_closest)
+
+        self.closest_distances[0]=self.get_closest_distance(self.points)
+        self.max_individual_distances[0]=self.get_max_individual_distance(
+            self.points)
+
+        if k.get('Max'):
+            batch_size-=1
+
+        for i in range(1,num_batches):
+            next_points=self.choose_next_best_points_sphere(
+                centre,batch_size,min_angle,slope=slope,intercept=intercept,
+                set_radius=radius)
+            if k.get('Max'):
+                f=self.values/np.sum(self.values)
+                next_points=np.append(next_points,[self.get_max(f)],axis=0)
+            self.closest_distances[i]=self.get_closest_distance(next_points)
+            self.max_individual_distances[i]=self.get_max_individual_distance(
+                next_points)
+
+            for point in next_points:
+                if np.all(point==self.goal):
+                    return
+            self.sample_next_batch(
+                'provided',sigma,scale,delta,
+                rietveld_closest=rietveld_closest,n_points=next_points)
+
+    def setup_one_batch_on_line_rietveld(self,k):
+
+        normal_a=np.array(k['Normal a'])
+        normal_b=np.array(k['Normal b'])
+        cube_size=k['Cube size']
+        delta_param=k['Delta param']
+        scale=k['Scale']
+        batch_size=k['Batch size']
+        contained_point=np.array(k['Contained point'])
+
+        weights=k['Weights']
+        weight_error=k['Weight error']
+        formulas=k['Formulas']
+        sampled_point=np.array(k['Sampled point'])
+        goal_point=np.array(k['Goal point'])
+
+        delta=cube_size/delta_param
+        normal_a=normal_a/np.linalg.norm(normal_a)
+        normal_b=normal_b/np.linalg.norm(normal_b)
+        normal_vectors=np.stack((normal_a,normal_b))
+        contained_point=contained_point*cube_size/np.sum(contained_point)
+        self.create_omega_constrained(
+            normal_vectors,cube_size,contained_point)
+        sampled_point=cube_size*sampled_point/np.sum(sampled_point)
+        goal_point=cube_size*goal_point/np.sum(goal_point)
+        self.goal=self.convert_point_to_constrained(goal_point)
+        wt_convert=wt_converter()
+        error_propagate=error_propagator(
+            normal_a.shape[0],cube_size,contained_point)
+        moles,moles_error,formulas_standard=wt_convert.wt_to_moles(
+            formulas,weights,weights_error=weight_error)
+        error_propagate.set_moles_error(moles,formulas_standard,moles_error)
+        merged_mean,merged_sigma=error_propagate.get_merged_balls_p(
+            self.basis)
+        sigma=self.add_first_sample(sampled_point,merged_mean,merged_sigma)
+        sigma=np.diag([sigma]*2)
+        self.calculate_p_from_samples(delta,scale)
+        self.sample_next_batch(
+            'lastline',sigma,scale,delta,
+            rietveld_closest=True,batch_size=batch_size,)
+
+    def setup_rietveld_balls(self,k):
+
+        normal_a=np.array(k['Normal a'])
+        normal_b=np.array(k['Normal b'])
+        cube_size=k['Cube size']
+        delta_param=k['Delta param']
+        scale=k['Scale']
+        batch_size=k['Batch size']
+        contained_point=np.array(k['Contained point'])
+
+        weights=k['Weights']
+        weight_error=k['Weight error']
+        formulas=k['Formulas']
+        sampled_point=np.array(k['Sampled point'])
+        goal_point=np.array(k['Goal point'])
+
+        delta=cube_size/delta_param
+        normal_a=normal_a/np.linalg.norm(normal_a)
+        normal_b=normal_b/np.linalg.norm(normal_b)
+        normal_vectors=np.stack((normal_a,normal_b))
+        contained_point=contained_point*cube_size/np.sum(contained_point)
+        self.create_omega_constrained(
+            normal_vectors,cube_size,contained_point)
+        sampled_point=cube_size*sampled_point/np.sum(sampled_point)
+        goal_point=cube_size*goal_point/np.sum(goal_point)
+        self.goal=self.convert_point_to_constrained(goal_point)
+        wt_convert=wt_converter()
+        error_propagate=error_propagator(
+            normal_a.shape[0],cube_size,contained_point)
+        moles,moles_error,formulas_standard=wt_convert.wt_to_moles(
+            formulas,weights,weights_error=weight_error)
+        error_propagate.set_moles_error(moles,formulas_standard,moles_error)
+        merged_mean,merged_sigma=error_propagate.get_merged_balls_p(
+            self.basis)
+        sigma=self.add_first_sample(sampled_point,merged_mean,merged_sigma)
+        sigma=np.diag([sigma]*2)
+        self.calculate_p_from_samples(delta,scale)
+        self.sample_next_batch(
+            'lastline',sigma,scale,delta,
+            rietveld_closest=True,batch_size=batch_size,)
+        radius=k.get('Radius')
+        min_angle=k['Min angle']
+        centre=k['Centre']
+
+        next_points=self.choose_next_best_points_sphere(
+            centre,batch_size,min_angle,set_radius=radius)
+        self.found_unknown=False
+
+        for point in next_points:
+            if np.all(point==self.goal):
+                self.found_unknown=True
+                return
+
+        self.sample_next_batch(
+            'provided',sigma,scale,delta,
+            rietveld_closest=True,n_points=next_points)
+
+    def test_ball_batch_closest_variance_many(self,k,result_descriptors):
+        if self.found_unknown:
+            return None
+        con_dim=self.constrained_dim
+        values=self.values/np.sum(self.values)
+        radii_reduction=k.get('Radius reduction')
+        radii=k.get('Radius')
+        slope=k.get('Slope')
+        intercept=k.get('Intercept')
+        custom_radius=k.get('Custom radius')
+        all_next_points=self.eval_next_best_points_sphere_radius(
+            k['Centre'],k['Batch size']-1,k['Min angle'],
+            radii_reduction=radii_reduction,radii=radii,slope=slope,
+            intercept=intercept,custom_radius=custom_radius)
+        p=None
+        if k['Centre']=='max':
+            p=self.get_max(f=values)
+        elif k['Centre']=='mean':
+            p=self.get_mean(f=values)
+        else:
+            print('error, unknown centre method')
+
+        if custom_radius is not None:
+            dists=[]
+            for n,next_p in enumerate(all_next_points):
+                next_points=np.append(next_p,[p],axis=0)
+                dists.append(self.get_closest_distance(next_points))
+            return np.array([dists])
+        else:
+            results=np.empty(
+                (all_next_points.shape[0],len(result_descriptors)))
+            for n,next_p in enumerate(all_next_points):
+                next_points=np.append(next_p,[p],axis=0)
+
+                result=[]
+                for descriptor in result_descriptors:
+                    if descriptor=='Variance':
+                        result.append(self.f_score(values,method='variance'))
+                    elif descriptor=='Radius reduction':
+                        result.append(radii_reduction[n])
+                    elif descriptor=='Closest distance':
+                        result.append(self.get_closest_distance(next_points))
+                    elif descriptor=='Radius':
+                        result.append(radii[n])
+                    else:
+                        print('Error: unknown descriptor')
+                results[n]= np.array(result)
+
+        return results
+
+    '''
+    def test_ball_best(self,k,result_descriptors):
+        evaluation_method=k['Evaluation method']
+        radii=k['Radii']
+
+        con_dim=self.constrained_dim
+        values=self.values/np.sum(self.values)
+
+        all_next_points=self.eval_next_best_points_sphere_radius(k['centre'],
+            k['batch_size']-1,k['min angle'],k['Radius reduction'])
+
+        p=None
+        if k['centre']=='max':
+            p=self.get_max(f=values)
+        elif k['centre']=='mean':
+            p=self.get_mean(f=values)
+        else:
+            print('error, unknown centre method')
+        results=np.empty((all_next_points.shape[0],len(result_descriptors)))
+
+        max_score=99999
+        max_radius=None
+        for n,next_p in enumerate(all_next_points):
+            next_points=np.append(next_p,[p],axis=0)
+            score=None
+            if evaluation_method=='Closest distance':
+                score=self.get_closest_distance(next_points)
+            else:
+                print('Error, unknown evaluation method')
+            if score < max_score:
+                max_score=score
+                max_radius=radii[n]
+                o
+                o
+            for descriptor in result_descriptors:
+                if descriptor=='Variance':
+                    result.append(self.f_score(values,method='variance'))
+                elif descriptor=='Radius reduction':
+                    result.append(k['Radius reduction'][n])
+                elif descriptor=='Closest distance':
+                    result.append(self.get_closest_distance(next_points))
+                else:
+                    print('Error: unknown descriptor')
+            results[n]= np.array(result)
+        return results
+    '''
+
+    def test_ball_batch_closest_variance(self,k,result_descriptors):
+        con_dim=self.constrained_dim
+        values=self.values/np.sum(self.values)
+        radius_reduction=k.get('Radius reduction')
+        intercept=k.get('Intercept')
+        slope=k.get('Slope')
+        radius=k.get('Radius')
+        next_points=self.choose_next_best_points_sphere(
+            k['Centre'],k['Batch size']-1,k['Min angle'],
+            radius_reduction=radius_reduction,slope=slope,intercept=intercept,
+            set_radius=radius)
+        result=[]
+        for descriptor in result_descriptors:
+            if descriptor== 'Variance':
+                result.append(self.f_score(values,method='variance'))
+            elif descriptor== 'Radius reduction':
+                result.append(k['Radius reduction'])
+            elif descriptor== 'Closest distance':
+                result.append(self.get_closest_distance(next_points))
+            elif descriptor=='Max element % difference':
+                print('Goal:',goal)
+                print('Chosen:',chosen_point)
+                maxdiff=0
+                for e in range(len(chosen_point)):
+                    diff=abs(chosen_point[e]-goal[e])
+                    pdiff=diff/goal[e]
+                    if pdiff > maxdiff:
+                        maxdiff = pdiff
+                result.append(maxdiff)
+            else:
+                print('Error - unknown result descriptor')
+
+        return np.array([result])
+
+    def test_num_batches_condition(self,k,result_descriptors):
+        unfound=True
+        sample_type=k['Sample type']
+        condition_type=k['Condition type']
+        condition_value=k['Condition values']
+        rietveld_closest=k['Rietveld closest']
+        scale=self.scale
+        delta=self.delta
+        sigma=self.sigma
+
+        batches=0
+        while(unfound):
+            if batches>20:
+                print('Warning: exceeded 20 batches')
+            #test if condition is met
+            val=None
+            if condition_type=='Closest distance':
+                val=self.get_closest_distance(self.points)
+            else:
+                print('Error: unknown condition type')
+            if val<condition_value:
+                unfound=False
+            else:
+                batches=batches+1
+                next_points=None
+                if sample_type=='ball':
+                    values=self.values/np.sum(self.values)
+                    centre=k['Centre']
+                    minangle=k['Min angle']
+                    radius_reduction=k['Radius reduction']
+                    batch_size=k['Batch size']
+                    next_points=self.choose_next_best_points_sphere(
+                        centre,batch_size-1,minangle,radius_reduction)
+                else:
+                    print('Error: unknown sample type')
+
+                self.sample_next_batch(
+                    'provided',sigma,scale,delta,
+                    rietveld_closest=True,n_points=next_points)
+
+        results=[]
+        for descriptor in result_descriptors:
+            if descriptor=='Number of batches':
+                results.append(batches)
+        return np.array([results])
+
+    def test(self,k,result_descriptors):
+        values=self.values/np.sum(self.values)
+
+        result=[]
+        for d in result_descriptors:
+            if d == 'Variance':
+                result.append(self.f_score(values,method='variance'))
+            elif d == 'Mean distance':
+                mean=self.get_mean(f=self.values)
+                result.append(np.linalg.norm(mean-self.goal))
+            elif d == 'Max distance':
+                centre=self.get_max(f=self.values)
+                result.append(np.linalg.norm(centre-self.goal))
+            elif d == 'Standard deviation':
+                result.append(np.sqrt(self.f_score(values,method='variance')))
+            elif d=='Variance from max':
+                result.append(self.f_score(values,method='max_variance'))
+            elif d=='Distance mean max':
+                centre=self.get_max(f=self.values)
+                mean=self.get_mean(f=self.values)
+                result.append(np.linalg.norm(mean-centre))
+            elif d=='Number samples':
+                result.append(len(self.points))
+            elif d == 'Batch number':
+                results=np.empty((len(self.closest_distances),3))
+                for n,(i,j) in enumerate(
+                    zip(self.closest_distances,self.max_individual_distances)):
+                    results[n]=np.array([n,i,j])
+                #return early as batch number has other descriptors for making
+                #dataframe (shouldnt be an issue but would print error)
+                return results
+            else:
+                print('Error: unknown result descriptor')
+                print(d)
+        return np.array([result])
+
+
+
+
+
+
+
 
 
 

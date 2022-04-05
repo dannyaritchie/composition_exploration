@@ -58,64 +58,86 @@ class Plotter:
 
     def tax_setup(self,tax,method):
         fontsize=10
-        tax.left_axis_label('SiS',fontsize=fontsize)
-        tax.right_axis_label('ZnS',fontsize=fontsize)
-        tax.bottom_axis_label('Li2S',fontsize=fontsize,offset=0)
+        tax.top_corner_label('ZnS',fontsize=fontsize,offset=0.15)
+        tax.right_corner_label('Li$_2$S',fontsize=fontsize,offset=0.05)
+        tax.left_corner_label('SiS',fontsize=fontsize,offset=0.05)
         tax.clear_matplotlib_ticks()
         tax.get_axes().axis('off')
-        tax.gridlines(color="black", multiple=10)
-        tax.ticks(axis='lbr', linewidth=1, multiple = 10, fontsize=5)
+        tax.boundary(linewidth=0.5)
+
+    def set_aspect(self,fig,tax,kind="",labels=True):
+        ax=tax.get_axes()
+        box = ax.get_position()
+        if kind!='heat':
+            ax.set_position([box.x0, box.y0, box.width * 0.88, box.height])
+        if labels:
+            ax.legend(loc='upper left', bbox_to_anchor=(0.68, 1.05))
+        ax.set_aspect(1)
+        tax._redraw_labels()
+        fig.set_size_inches(5,5)
+
+    def set_scatter_kwargs(self):
+        self.scatter_ka={'marker':'x',
+                         'linewidth':0.5,
+                         's':20,
+                         'zorder':8,
+                     }
+
+    def set_heat_cbar_kwargs(self):
+        self.cb_kwargs = {"shrink" : 0.75,
+                     #"orientation" : "horizontal",
+                     "fraction" : 0.1,
+                     "pad" : 0.02,
+                     "aspect" : 25,
+                     "anchor":(0,0.7)
+                    }
+
+    def set_directory(self,directory):
+        self.directory=directory
 
     def mean_line(self,points,end_points,mean):
         fig, tax= ternary.figure(scale=100)
         self.tax_setup(tax,'line')
         tax.scatter(
-            points,marker='x',label='Initial',color='orange',linewidth=1)
+            points,label='Initial',color='Blue',**self.scatter_ka)
         tax.scatter(
-            [mean],marker='x',label='K',color='red',linewidth=1)
-        tax.line(mean,points[0],linestyle='--',linewidth=0.8,color='red')
-        tax.line(points[0],end_points[0],linewidth=0.8,color='orange')
-        ax=tax.get_axes()
-        ax.legend(loc='upper right')
+            [mean],label='K',color='Green',**self.scatter_ka)
+        tax.line(mean,points[0],linestyle='--',linewidth=0.5,color='Green')
+        tax.line(points[0],end_points[0],linewidth=0.5,color='Blue')
+        self.set_aspect(fig,tax)
         plt.show()
 
     def mean_small(self,mean,small_means,labels):
         fig, tax= ternary.figure(scale=100)
         self.tax_setup(tax,'line')
-        colors=['blue','green','purple']
+        colors=['orange','turquoise','purple']
         tax.scatter(
-            [mean],marker='x',label='K',color='red',linewidth=1)
+            [mean],label='K',color='Green',**self.scatter_ka)
         for point,label,c in zip(small_means,labels,colors):
             tax.scatter(
-                [point],marker='x',label=label,linewidth=1,
-                color=c)
-        ax=tax.get_axes()
-        ax.legend(loc='upper right')
+                [point],label=label,color=c,**self.scatter_ka)
+        self.set_aspect(fig,tax) 
+        plt.savefig("../../mat presentation figures/test.png")
         plt.show()
 
     def merged_ball(self,data,mean):
         fig,tax=ternary.figure(scale=100)
         self.tax_setup(tax,'heat')
         tax.scatter(
-            [mean],marker='x',label='K',color='red',linewidth=0.2,zorder=8,
-            s=10)
-        tax.heatmap(data=data,scale=100)
-        ax=tax.get_axes()
-        ax.legend(loc='upper right')
+            [mean],label='K',color='Green',**self.scatter_ka)
+        tax.heatmap(data=data,scale=100,cmap='Reds',cb_kwargs=self.cb_kwargs)
+        self.set_aspect(fig,tax,kind='heat')
         plt.show()
 
     def p_mean_initial(self,data,mean,points):
         fig,tax=ternary.figure(scale=100)
         self.tax_setup(tax,'heat')
         tax.scatter(
-            [mean],marker='x',label='K',color='red',linewidth=0.8,zorder=8,
-            s=15)
+            [mean],label='K',color='Green',**self.scatter_ka)
         tax.scatter(
-            points,marker='x',label='Initial',color='orange',linewidth=0.8,
-            zorder=8,s=15)
-        tax.heatmap(data=data,scale=100)
-        ax=tax.get_axes()
-        ax.legend(loc='upper right')
+            points,label='Initial',color='Blue',**self.scatter_ka)
+        tax.heatmap(data=data,scale=100,cmap='Reds',cb_kwargs=self.cb_kwargs)
+        self.set_aspect(fig,tax,kind='heat')
         plt.show()
 
     def linebatch_initial(self,points,labels,colors):
@@ -123,46 +145,105 @@ class Plotter:
         self.tax_setup(tax,'heat')
         for point,label,color in zip(points,labels,colors):
             tax.scatter(
-                [point],marker='x',label=label,color=color,linewidth=0.8,zorder=8,
-                s=15)
-        ax=tax.get_axes()
-        ax.legend(loc='upper right')
+                [point],label=label,color=color,**self.scatter_ka)
+        self.set_aspect(fig,tax)
         plt.show()
 
     def linebatch_initial_chosen(self,points,labels,colors,chosen_point):
         fig,tax=ternary.figure(scale=100)
         self.tax_setup(tax,'heat')
         tax.scatter(
-            [chosen_point],marker='o',label='Closest',color='red',linewidth=0.8,zorder=0,
+            [chosen_point],marker='o',label='Closest',color='red',zorder=0,
             s=30)
         for point,label,color in zip(points,labels,colors):
             tax.scatter(
-                [point],marker='x',color=color,linewidth=0.8,zorder=8,
-                s=15)
-        ax=tax.get_axes()
-        ax.legend(loc='upper right')
+                [point],color=color,**self.scatter_ka)
+        self.set_aspect(fig,tax)
         plt.show()
 
-    def p_second_max(self,data,maxp):
+    def first_chosen(self,ps,es,ls,cs):
+        fig,tax=ternary.figure(scale=100)
+        self.tax_setup(tax,method='')
+        for (p,e,l,c) in zip(ps,es,ls,cs):
+            tax.scatter([p],label=l,color=c,**self.scatter_ka)
+            tax.line(p,e,linewidth=0.5,color=c,zorder=7)
+        self.set_aspect(fig,tax)
+        plt.savefig(self.directory+'first_chosen.png',dpi=200)
+        plt.show()
+
+    def p_second_max(self,data,ps,es,ls,cs):
         fig,tax=ternary.figure(scale=100)
         self.tax_setup(tax,'heat')
-        tax.scatter(
-            [maxp],marker='x',label='Next best point',color='red',
-            linewidth=0.8,zorder=8,s=15)
-        tax.heatmap(data=data,scale=100)
-        ax=tax.get_axes()
-        ax.legend(loc='upper right')
+        tax.heatmap(data=data,scale=100,cmap='Reds',cb_kwargs=self.cb_kwargs)
+        self.set_aspect(fig,tax,kind='heat')
+        plt.show()
+
+    def p_second(self,data):
+        fig,tax=ternary.figure(scale=100)
+        self.tax_setup(tax,'heat')
+        tax.heatmap(data=data,scale=100,cmap='Reds',cb_kwargs=self.cb_kwargs)
+        self.set_aspect(fig,tax,kind='heat',labels=False)
+        plt.savefig(self.directory + 'p_second.png',dpi=200)
+        plt.show()
+
+    def p_second_maxi_test(self,data,ps,es,ls,cs,mean,goal):
+        fig,tax=ternary.figure(scale=100)
+        self.tax_setup(tax,'heat')
+        tax.heatmap(data=data,scale=100,cmap='Reds',cb_kwargs=self.cb_kwargs)
+        tax.scatter([mean],label='mean',color='lime',**self.scatter_ka)
+        tax.scatter([goal],label='goal',color='lightblue',**self.scatter_ka)
+        for (p,e,l,c) in zip(ps,es,ls,cs):
+            tax.scatter([p],label=l,color=c,**self.scatter_ka)
+            tax.line(p,e,linewidth=0.5,color=c,zorder=7)
+        self.set_aspect(fig,tax,kind='heat')
         plt.show()
 
     def second_batch(self,points):
         fig,tax=ternary.figure(scale=100)
         self.tax_setup(tax,'heat')
         tax.scatter(
-            points,marker='x',label='Next best points',color='red',
-            linewidth=0.8,zorder=8,s=15)
-        ax=tax.get_axes()
-        ax.legend(loc='upper right')
+            points,label='Batch 2',color='Lime',**self.scatter_ka)
+        self.set_aspect(fig,tax)
+        plt.savefig(self.directory + 'second_batch.png',dpi=200)
         plt.show()
+
+    def second_chosen(self,ps,es,ls,cs):
+        fig,tax=ternary.figure(scale=100)
+        self.tax_setup(tax,method='')
+        for (p,e,l,c) in zip(ps,es,ls,cs):
+            tax.scatter([p],label=l,color=c,**self.scatter_ka)
+            tax.line(p,e,linewidth=0.5,color=c,zorder=7)
+        self.set_aspect(fig,tax)
+        plt.savefig(self.directory+'second_chosen.png',dpi=200)
+        plt.show()
+
+    def p_third(self,data):
+        fig,tax=ternary.figure(scale=100)
+        self.tax_setup(tax,'heat')
+        tax.heatmap(data=data,scale=100,cmap='Reds',cb_kwargs=self.cb_kwargs)
+        self.set_aspect(fig,tax,kind='heat',labels='False')
+        plt.savefig(self.directory+'p_third.png',dpi=200)
+        plt.show()
+
+    def third_batch(self,points):
+        fig,tax=ternary.figure(scale=100)
+        ka=self.scatter_ka
+        ka['s']=10
+        self.tax_setup(tax,'heat')
+        tax.scatter(
+            points,label='Batch 3',color='Turquoise',**ka)
+        self.set_aspect(fig,tax)
+        plt.savefig(self.directory + 'second_batch.png',dpi=200)
+        plt.show()
+
+    def final(self,data,goal):
+        fig,tax=ternary.figure(scale=100)
+        self.tax_setup(tax,'heat')
+        tax.heatmap(data=data,scale=100,cmap='Reds',cb_kwargs=self.cb_kwargs)
+        tax.scatter([goal],label='Unknown',color='Purple',**self.scatter_ka)
+        self.set_aspect(fig,tax,kind='heat')
+        plt.show()
+
 
     def process_a(self,goal,num_samples):
         self.cmap=get_cmap(num_samples+3)
@@ -283,14 +364,12 @@ class Plotter:
         tax.right_axis_label('ZnS',fontsize=fontsize)
         tax.bottom_axis_label('Li2S',fontsize=fontsize,offset=0)
         tax.ticks(axis='lbr', linewidth=1, multiple = 10, fontsize=5)
-        '''
-        cb_kwargs = {"shrink" : 1,
+        cb_kwargs = {"shrink" : 2,
                      "orientation" : "horizontal",
                      "fraction" : 0.1,
                      "pad" : 0.05,
                      "aspect" : 30}
-        '''
-        self.plot_heatmap_ternary(data,tax)
+        self.plot_heatmap_ternary(data,tax,cb_kwargs=cb_kwargs)
         tax.scatter(
             [merged_mean],marker='x',s=10,linewidth=0.4,zorder=2,label=mean_label,
             c='red')

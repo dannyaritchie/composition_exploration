@@ -433,13 +433,18 @@ setup=all_information()
 normal_a = np.array([1,3,-2,-1])
 normal_b = np.array([1,1,1,1])
 normal_vectors=np.stack((normal_a,normal_b)) 
-cube_size=500
+cube_size=300
 contained_point=np.array([1,1,1,2])*cube_size/5
-dist=0.5 #simulated distance of avg known composition to sample
-sigma=np.diag(np.array([0.0188,0.0188])/dist)
-setup.heatmap_test(
-    normal_vectors,cube_size,contained_point,sigma)
+sigma=np.diag(np.array([0.3,0.3]))
+setup.setup(normal_vectors,contained_point,cube_size,sigma,create_heatmap=True)
+setup.random_initialise(2)
+setup.make_p_gaussian(sigma,1,1)
+plotter=visualise_square()
+setup.create_plot_lines()
+setup.make_heatmap_constrained()
+plotter.test_heat(setup.points,setup.plot2d_lines,setup.heatmap,setup.xlim,setup.ylim)
 '''
+
 #code for finding next points (with jon pawley a)
 '''
 setup=all_information()
@@ -622,7 +627,8 @@ setup.plot_merged_ball(
 #setup.plot_merged_ball(merged_mean,merged_sigma,projection='None')
 #setup.add_first_sample(sampled_point,merged_mean,merged_sigma)
 #delta=0.1
-#setup.calculate_p_from_samples(delta)
+#scale=1
+#setup.calculate_p_from_samples(delta,scale)
 #setup.plot_p()
 #setup.plot_merged_ball_p(merged_mean,merged_sigma,delta)
 '''
@@ -660,7 +666,8 @@ for i in range(1):
     sigmas[i]=sigma[0]
     sigmas[100+i]=sigma[1]
     #delta=0.1
-    #setup.calculate_p_from_samples(delta)
+    #scale=1
+    #setup.calculate_p_from_samples(delta,scale)
     #setup.plot_p()
     #setup.plot_merged_ball_p(merged_mean,merged_sigma,delta)
 print(np.mean(sigmas))
@@ -680,7 +687,7 @@ scale=1
 delta=1
 power=1
 num_batches=1
-batchsize=5
+batch_size=5
 directory='../figures/processfigures/sampleonline'
 setup.setup(normal_vectors,contained_point,cube_size,sigma,create_heatmap=True)
 setup.random_initialise(1)
@@ -694,7 +701,7 @@ labels={
 }
 for i in range(num_batches):
     print(i)
-    setup.sample_next_batch('lastline',batchsize,sigma,scale,delta)
+    setup.sample_next_batch('lastline',sigma,scale,delta,batch_size=batch_size,)
     points=setup.convert_points_to_new_projection('berny',setup.points)
     end_points=setup.get_end_points('berny')
     values_norm=setup.values/np.sum(setup.values)
@@ -715,7 +722,7 @@ sigma=np.diag([0.186,0.186])
 scale=1
 delta=1
 power=1
-batchsize=5
+batch_size=5
 num_points=50
 num_targets=50
 angular_equivalence=10
@@ -729,15 +736,16 @@ for i in range(num_trials):
     setup.random_initialise(1)
     setup.make_p_gaussian(sigma,scale,delta,save_reduced=True)
     if setup.sample_next_batch(
-        'pure_explore',batchsize,sigma,scale,delta,num_points=num_points
-        ,num_targets=num_targets,angular_equivalence=angular_equivalence,
-        exclusion=exclusion):
+        'pure_explore',sigma,scale,delta,batch_size=batch_size,
+        num_points=num_points,num_targets=num_targets,
+        angular_equivalence=angular_equivalence,exclusion=exclusion):
         scoresb[i]=setup.get_score('mean_mode_variance')
     else:
         scoresb[i]=[0,0,0]
     setup.revert_to_initial()
     setup.make_p_gaussian(sigma,scale,delta,save_reduced=True)
-    if setup.sample_next_batch('lastline',batchsize,sigma,scale,delta):
+    if setup.sample_next_batch('lastline',sigma,scale,delta,
+    batch_size=batchsize):
         scores[i]=setup.get_score('mean_mode_variance')
     else:
         scoresb[i]=[0,0,0]
@@ -791,8 +799,9 @@ setup.setup(normal_vectors,contained_point,cube_size,sigma)
 setup.random_initialise(1)
 setup.make_p_gaussian(sigma,scale,delta,save_reduced=True)
 setup.sample_next_batch(
-    'pure_explore',batchsize,sigma,scale,delta,num_points=num_points
-    ,num_targets=num_targets,angular_equivalence=angular_equivalence,
+    'pure_explore',sigma,scale,delta,batch_size=batchsize,
+    num_points=num_points,num_targets=num_targets,
+    angular_equivalence=angular_equivalence,
     exclusion=exclusion,plot_process=True)
 '''
 #code to test next sample algorithm
@@ -833,7 +842,7 @@ for i in range(num_trials):
     setup.setup(normal_vectors,contained_point,cube_size,sigma)
     setup.random_initialise(1)
     setup.make_p_gaussian(sigma,scale,delta)
-    if setup.sample_next_batch('lastline',5,sigma,scale,delta):
+    if setup.sample_next_batch('lastline',sigma,scale,delta,batch_size=5):
         scores[i]=setup.get_score('mean_mode_variance')
     else:
         scores[i]=n.array([0,0,0])
@@ -867,12 +876,13 @@ for y in ys:
     plt.clf()
 '''
 #code for plotting matt presentation figs
+'''
 setup=all_information()
 normal_a = np.array([1,2,4,-2])
 normal_b = np.array([1,1,1,1])
 normal_vectors=np.stack((normal_a,normal_b)) 
 cube_size=100
-delta_param=80
+delta_param=2
 scale=1
 delta=cube_size/delta_param
 contained_point=np.array([2,1,1,4])*cube_size/8
@@ -897,54 +907,488 @@ print(6*moles/np.sum(moles))
 error_propagate.set_moles_error(moles,formulas_standard,moles_error)
 merged_mean,merged_sigma=error_propagate.get_merged_balls_p(setup.basis)
 small_means,small_sigmas=error_propagate.get_small_balls_p(setup.basis)
-sigma=setup.add_first_sample(sampled_point,merged_mean,merged_sigma)[0]
+print(merged_sigma,'hhh')
+sigma=setup.add_first_sample(sampled_point,merged_mean,merged_sigma)
+print('!!!',sigma)
 #delta=0.1
-setup.calculate_p_from_samples(delta)
+#scale=1
+setup.calculate_p_from_samples(delta,scale)
 plotter=Plotter('berny')
+plotter.set_scatter_kwargs()
+plotter.set_heat_cbar_kwargs()
+plotter.set_directory('../../mat presentation figures/')
 points=setup.convert_points_to_new_projection('berny',setup.points)
 mean=setup.convert_points_to_new_projection('berny',merged_mean)
 end_points=setup.get_end_points('berny')
 #plotter.mean_line(points,end_points,mean)
 small_means=setup.convert_points_to_new_projection('berny',small_means)
-#labels=['Li4SiS (1.88M)','ZnS (2.79M)','Li2S (1.33M)']
+labels=['Li$_4$SiS (1.88M)','ZnS (2.79M)','Li$_2$S (1.33M)']
 #plotter.mean_small(mean,small_means,labels)
 p=setup.make_merged_ball_values(merged_mean,merged_sigma)
-#data=setup.convert_f_to_new_projection('berny',p,setup.omega)
+data=setup.convert_f_to_new_projection('berny',p,setup.omega)
 #plotter.merged_ball(data,mean)
-#data=setup.convert_f_to_new_projection('berny',setup.values,setup.omega)
+data=setup.convert_f_to_new_projection('berny',setup.values,setup.omega)
+#d0=setup.make_heatmap_constrained()
 #plotter.p_mean_initial(data,mean,points)
-setup.sample_next_batch(
-    'lastline',5,np.diag(merged_sigma),scale,delta,rietveld_closest=True)
-print(sampled_point)
-points=setup.convert_points_to_new_projection('berny',setup.points)
-points_s=setup.convert_to_standard_basis(setup.points)
+sigma=np.diag([sigma]*2)
+n_points=setup.sample_next_batch(
+    'lastline',sigma,scale,delta,rietveld_closest=True,
+    batch_size=5,return_points=True)
+n_points=np.append(setup.points[0:1],n_points,axis=0)
+#print(sampled_point)
+#print(points)
+points=setup.convert_points_to_new_projection('berny',n_points)
+points_s=setup.convert_to_standard_basis(n_points)
 phase_field=['Li','Zn','Si','S']
 labels=['Initial']
-colors=['orange','green','purple','brown','red','blue']
+colors=['Blue','darkgreen','olivedrab','mediumseagreen','springgreen','lime']
+#print(points)
+#print('a')
 for i in points_s[1:]:
     norm=i/np.sum(i)
     label=''
     for j,e in zip(norm,phase_field):
         num=round(j,2)
         if num!=0:
-            label=label+e+str(int(round(100*num,0)))
+            label=label+e+"$_{"+str(int(round(100*num,0)))+"}$"
     labels.append(label)
-for i in labels:
-    print(i)
+#for i in labels:
+#    print(i)
 #plotter.linebatch_initial(points,labels,colors)
 goal=setup.convert_points_to_new_projection('berny',setup.goal)
 chosen_point=setup.convert_points_to_new_projection('berny',setup.chosen_point)
 #plotter.linebatch_initial_chosen(points,labels,colors,chosen_point)
-data=setup.convert_f_to_new_projection('berny',setup.values,setup.omega)
 p=setup.values/np.sum(setup.values)
-maxp=setup.convert_points_to_new_projection(
-    'berny',setup.get_max(f=p))
-#plotter.p_second_max(data,maxp)
-next_points=setup.convert_points_to_new_projection(
-    'berny',setup.choose_next_best_points_sphere('max',4,80))
-next_points=np.append(next_points,[maxp],axis=0)
-plotter.second_batch(next_points)
+data=setup.convert_f_to_new_projection('berny',p,setup.omega)
+centre=setup.convert_points_to_new_projection(
+    'berny',setup.get_mean(f=p))
+points=setup.convert_points_to_new_projection('berny',setup.points)
+end_points=setup.get_end_points('berny')
+labels=['Initial','Closest']
+colors=['Blue','darkgreen']
+#plotter.first_chosen(points,end_points,labels,colors)
+#plotter.p_second_maxi_test(data,points,end_points,labels,colors,centre,goal)
+#plotters=visualise_square()
+#print('www',setup.points)
+#d2=setup.make_heatmap_constrained()
+#setup.points=setup.points[1:]
+#setup.lines=setup.lines[1:]
+#d1=setup.make_heatmap_constrained()
+#plotters.test_heat(d0,d1,d2,setup.xlim,setup.ylim)
+#plotter.p_second_max(data,points,end_points,labels,colors)
+#plotter.p_second(data)
+next_points=setup.choose_next_best_points_sphere(
+    'mean',5,80,radius_reduction=20)
+next_points_b=setup.convert_points_to_new_projection('berny',next_points)
+closest_b=setup.convert_points_to_new_projection(
+    'berny',setup.get_closest_point(next_points,index=False))
+#plotter.second_batch(next_points_b)
+setup.sample_next_batch(
+    'provided',sigma,scale,delta,rietveld_closest=True,n_points=next_points)
 
+points=setup.convert_points_to_new_projection('berny',setup.points)
+end_points=setup.get_end_points('berny')
+labels=['Initial','1st Closest','2nd Closest']
+colors=['Blue','darkgreen','Lime']
+#plotter.second_chosen(points,end_points,labels,colors)
+
+p=setup.values/np.sum(setup.values)
+data=setup.convert_f_to_new_projection('berny',p,setup.omega)
+plotter.p_third(data)
+
+next_points=setup.choose_next_best_points_sphere(
+    'mean',5,80,radius_reduction=20)
+next_points_b=setup.convert_points_to_new_projection('berny',next_points)
+plotter.third_batch(next_points_b)
+#plotter.final(data,goal)
+
+#print(next_points)
+closest_point=setup.get_closest_point(next_points,index=False)
+est_known=setup.get_estimated_known_composition(closest_point)
+closest_point=setup.convert_to_standard_basis(closest_point)
+goal=setup.convert_to_standard_basis(setup.goal)
+#print(goal)
+#print(closest_point)
+#print(est_known)
+a=np.stack([est_known,closest_point])
+a=a.T
+#print(a)
+x=scipy.linalg.lstsq(a,goal)
+#print(x)
+#print(setup.get_closest_distance(next_points))
+#print(setup.sigma)
+'''
+
+
+
+#code for getting resolution
+'''
+setup=all_information()
+normal_a = np.array([1,2,4,-2])
+normal_b = np.array([1,1,1,1])
+normal_vectors=np.stack((normal_a,normal_b)) 
+cube_size=100
+delta_param=80
+scale=1
+delta=cube_size/delta_param
+contained_point=np.array([2,1,1,4])*cube_size/8
+setup.create_omega_constrained(
+    normal_vectors,cube_size,contained_point,create_heatmap=True)
+a=np.array([0,0])
+b=np.array([0,1])
+a_s=setup.convert_to_standard_basis(a)/cube_size
+b_s=setup.convert_to_standard_basis(b)/cube_size
+print(np.linalg.norm(a_s-b_s))
+print(np.abs(a_s-b_s).max())
+'''
+
+
+
+
+'''
+#code for getting results from setup
+test=all_information()
+overseer=Results()
+
+num_trials=6000
+output_file='../data/on_sphere_eval/compare_dist.csv'
+
+setup_args={
+    'Normal a':[1,2,4,-2],
+    'Normal b':[1,1,1,1],
+    'Cube size':100,
+    'Delta param':80,
+    'Scale':1,
+    'Contained point':[2,1,1,4],
+    'Batch size':5,
+    'Sigma':0.1,
+    'Rietveld closest':True,
+    'Key param':'Compare'
+}
+setup_type=test.setup_one_batch_on_line
+
+test_args={
+    'Batch size':setup_args['Batch size'],
+    'Centre':'mean',
+    'Min angle':80,
+    'Radius reduction':10,
+    'Intercept':-66,
+    'Slope':2.26,
+    'Radius':3.5,
+    'Custom radius':'yes',
+}
+#test_type=test.test_ball_batch_closest_variance
+test_type=test.test_ball_batch_closest_variance_many
+#test_type=None
+#if isinstance(test_args['Radius reduction'],range):
+#    test_type=test.test_ball_batch_closest_variance_many
+#else:
+#    test_type=test.test_ball_batch_closest_variance
+
+result_descriptors=['Radius','Radius reduction','Regression']
+
+overseer.setup_test(
+    setup_type,setup_args,test_type,test_args,result_descriptors,
+    output_file=output_file,num_trials=num_trials)
+    '''
+
+#code for plotting
+'''
+output_file='../data/on_sphere_eval/.csv'
+overseer=Results()
+overseer.plot_test(output_file)
+'''
+#code for getting expected distance from Rietveld initialisation
+'''
+test=all_information()
+overseer=Results()
+
+num_trials=1000
+output_file='../data/on_sphere_eval/e.csv'
+
+setup_args={
+    'normal_a':[1,2,4,-2],
+    'normal_b':[1,1,1,1],
+    'cube_size':100,
+    'delta_param':80,
+    'scale':1,
+    'contained_point':[2,1,1,4],
+    'batch_size':5,
+    'formulas':['Li 4 Zn 0 Si 1 S 4',
+                'Li 0 Zn 1 Si 0 S 1',
+                'Li 2 Zn 0 Si 0 S 1'],
+    'sampled_point':[24,10,9,40],
+    'goal_point':[2,1,1,4],
+    'weights':[0.51,0.40,0.09],
+    'weight_error':[0.05],
+}
+setup_type=test.setup_one_batch_on_line_rietveld
+
+test_args={
+    'Radius reduction':10,
+    'batch_size':setup_args['batch_size'],
+    'centre':'mean',
+    'min angle':80,
+}
+test_type=test.test_ball_batch_closest_variance
+
+result_descriptors=['Closest distance', 'Max element % difference']
+overseer.setup_test(
+    setup_type,setup_args,test_type,test_args,result_descriptors,
+    output_file=output_file,num_trials=num_trials)
+'''
+#code for getting optimal radius Rietveld setup
+test=all_information()
+overseer=Results()
+
+num_trials=1000
+output_file='../data/on_sphere_eval/radius_opt_Rieveld_1.csv'
+
+setup_args={
+    'Normal a':[1,2,4,-2],
+    'Normal b':[1,1,1,1],
+    'Cube size':100,
+    'Delta param':80,
+    'Scale':1,
+    'Contained point':[2,1,1,4],
+    'Batch size':5,
+    'Formulas':['Li 4 Zn 0 Si 1 S 4',
+                'Li 0 Zn 1 Si 0 S 1',
+                'Li 2 Zn 0 Si 0 S 1'],
+    'Sampled point':[24,10,9,40],
+    'Goal point':[2,1,1,4],
+    'Weights':[0.51,0.40,0.09],
+    'Weight error':[0.05],
+    'Radius':2.25,
+    'Min angle':80,
+    'Centre':'mean',
+    'Ball batches':1,
+}
+setup_type=test.setup_rietveld_balls
+
+test_args={
+    'Radius':np.arange(0.1,2,0.01),
+    'Batch size':setup_args['Batch size'],
+    'Centre':'mean',
+    'Min angle':80,
+}
+test_type=test.test_ball_batch_closest_variance_many
+
+result_descriptors=['Closest distance', 'Radius']
+overseer.setup_test(
+    setup_type,setup_args,test_type,test_args,result_descriptors,
+    output_file=output_file,num_trials=num_trials)
+
+#code for getting expected number of batches
+'''
+test=all_information()
+overseer=Results()
+
+num_trials=10
+output_file='../data/on_sphere_eval/num_batches.csv'
+
+setup_args={
+    'Normal a':[1,2,4,-2],
+    'Normal b':[1,1,1,1],
+    'Cube size':100,
+    'Delta param':80,
+    'Scale':1,
+    'Contained point':[2,1,1,4],
+    'Batch size':5,
+    'Sigma':0.1,
+    'Rietveld closest':True
+}
+setup_type=test.setup_one_batch_on_line
+
+test_args={
+    'Radius reduction':10,
+    'Batch size':setup_args['Batch size'],
+    'Centre':'mean',
+    'Min angle':80,
+    'Sample type':'ball',
+    'Condition type':'Closest distance',
+    'Condition values':0.01,
+    'Rietveld closest':True
+}
+test_type=test.test_num_batches_condition
+
+result_descriptors=['Number of batches']
+overseer.setup_test(
+    setup_type,setup_args,test_type,test_args,result_descriptors,
+    output_file=output_file,num_trials=num_trials)
+'''
+
+#code for getting distance to mean vs variance
+'''
+test=all_information()
+overseer=Results()
+
+num_trials=6000
+output_file='../data/on_sphere_eval/var_dist.csv'
+
+setup_args={
+    'Normal a':[1,2,4,-2],
+    'Normal b':[1,1,1,1],
+    'Cube size':100,
+    'Delta param':80,
+    'Scale':1,
+    'Contained point':[2,1,1,4],
+    'Batch size':5,
+    'Sigma':0.1,
+    'Rietveld closest':True
+}
+setup_type=test.setup_one_batch_on_line
+
+test_args={}
+test_type=test.test
+
+result_descriptors=['Variance','Mean distance','Standard deviation']
+overseer.setup_test(
+    setup_type,setup_args,test_type,test_args,result_descriptors,
+    output_file=output_file,num_trials=num_trials)
+'''
+#code for getting results from setup
+'''
+test=all_information()
+overseer=Results()
+
+num_trials=1000
+output_file='../data/on_sphere_eval/compare.csv'
+
+setup_args={
+    'Normal a':[1,3,-2,-2,-1],
+    'Normal b':[1,1,1,1,1],
+    'Cube size':30,
+    'Delta param':80,
+    'Scale':1,
+    'Contained point':[2,1,1,1,1],
+    'Batch size':5,
+    'Sigma':0.1,
+    'Rietveld closest':True,
+}
+setup_type=test.setup_one_batch_on_line
+
+test_args={
+    'Batch size':setup_args['Batch size'],
+    'Centre':'mean',
+    'Min angle':100,
+    'Radius reduction':30,
+    'Intercept':-26.4,
+    'Slope':1.21,
+    'Radius':0.88,
+    'Custom radius':'yes',
+}
+#test_type=test.test_ball_batch_closest_variance
+test_type=test.test_ball_batch_closest_variance_many
+#test_type=None
+#if isinstance(test_args['Radius reduction'],range):
+#    test_type=test.test_ball_batch_closest_variance_many
+#else:
+#    test_type=test.test_ball_batch_closest_variance
+
+result_descriptors=['Radius','Reduction','Regression']
+
+overseer.setup_test(
+    setup_type,setup_args,test_type,test_args,result_descriptors,
+    output_file=output_file,num_trials=num_trials)
+    '''
+#code for getting distance to mean vs variance
+'''
+test=all_information()
+overseer=Results()
+
+num_trials=1000
+output_file='../data/on_sphere_eval/var_dist_5.csv'
+
+setup_args={
+    'Normal a':[1,3,-2,-2,-1],
+    'Normal b':[1,1,1,1,1],
+    'Cube size':30,
+    'Delta param':80,
+    'Scale':1,
+    'Contained point':[2,1,1,1,1],
+    'Batch size':5,
+    'Sigma':0.1,
+    'Rietveld closest':True
+}
+setup_type=test.setup_one_batch_on_line
+
+test_args={}
+test_type=test.test
+
+result_descriptors=['Variance','Mean distance','Standard deviation']
+overseer.setup_test(
+    setup_type,setup_args,test_type,test_args,result_descriptors,
+    output_file=output_file,num_trials=num_trials)
+'''
+#code for random setup
+'''
+test=all_information()
+overseer=Results()
+
+num_trials=2000
+output_file='../data/on_sphere_eval/var_mean_sig.csv'
+
+setup_args={
+    'Normal a':[1,2,4,-2],
+    'Normal b':[1,1,1,1],
+    'Cube size':100,
+    'Delta param':80,
+    'Scale':1,
+    'Contained point':[2,1,1,4],
+    'Sigma':0.3,
+    'Max points':10
+
+}
+setup_type=test.setup_random
+
+test_args={
+}
+test_type=test.test
+
+result_descriptors=['Mean distance','Standard deviation']
+overseer.setup_test(
+    setup_type,setup_args,test_type,test_args,result_descriptors,
+    output_file=output_file,num_trials=num_trials)
+    '''
+#code to test n batches
+'''
+test=all_information()
+overseer=Results()
+
+num_trials=1000
+output_file='../data/on_sphere_eval/n_batches_w_max_score_sig_new.csv'
+
+setup_args={
+    'Normal a':[1,2,4,-2],
+    'Normal b':[1,1,1,1],
+    'Cube size':100,
+    'Delta param':80,
+    'Scale':1,
+    'Contained point':[2,1,1,4],
+    'Sigma':0.3,
+    'Rietveld closest':True,
+    'Number of batches':10,
+    'Slope':2.29,
+    'Intercept':-65,
+    #'Radius':5,
+    'Centre':'mean',
+    'Batch size':5,
+    'Min angle':110,
+    'Max':True,
+}
+setup_type=test.setup_n_batches_recording
+
+test_args={
+}
+test_type=test.test
+
+result_descriptors=['Batch number','Closest distance',
+                    'Max individual distance']
+overseer.setup_test(
+    setup_type,setup_args,test_type,test_args,result_descriptors,
+    output_file=output_file,num_trials=num_trials)
+    '''
 
 
 
