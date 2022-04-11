@@ -1864,10 +1864,9 @@ class all_information:
         return x_t
 
     def get_estimated_known_composition(self,point):
-        print(point)
         point_s=self.convert_to_standard_basis(point)
         goal_s=self.convert_to_standard_basis(self.goal)
-        line = goal_s-point_s
+        line = point_s-goal_s
         mindist=9999
         end_point=None
         for x,delta in zip(goal_s,line):
@@ -1878,10 +1877,13 @@ class all_information:
         est_known=goal_s+mindist/2*line
         return est_known
         
+    def make_formula_for_molar_mass(self,phases,composition):
+        formula=""
+        for p,c in zip(phases, composition):
+            formula += p + " " + str(c) + " "
+        return formula
 
 
-
-        
     def get_end_points(self,method):
         if method == 'berny':
             points=self.convert_points_to_new_projection('berny',self.points)

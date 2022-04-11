@@ -876,7 +876,6 @@ for y in ys:
     plt.clf()
 '''
 #code for plotting matt presentation figs
-'''
 setup=all_information()
 normal_a = np.array([1,2,4,-2])
 normal_b = np.array([1,1,1,1])
@@ -885,7 +884,7 @@ cube_size=100
 delta_param=2
 scale=1
 delta=cube_size/delta_param
-contained_point=np.array([2,1,1,4])*cube_size/8
+contained_point=np.array([2,2,1,5])*cube_size/10
 setup.create_omega_constrained(
     normal_vectors,cube_size,contained_point,create_heatmap=True)
 f1='Li 4 Zn 0 Si 1 S 4'
@@ -923,7 +922,12 @@ end_points=setup.get_end_points('berny')
 #plotter.mean_line(points,end_points,mean)
 small_means=setup.convert_points_to_new_projection('berny',small_means)
 labels=['Li$_4$SiS (1.88M)','ZnS (2.79M)','Li$_2$S (1.33M)']
-#plotter.mean_small(mean,small_means,labels)
+plotter.mean_small(mean,small_means,labels)
+labels=['Li$_4$SiS','ZnS','Li$_2$So']
+gl='Li$_2$ZnSiS$_4$'
+goal=setup.convert_points_to_new_projection('berny',setup.goal)
+plotter.mean_all(
+    points[0],'Li$_24$Zn$_10$Si$_9$S$_40$',small_means,labels,goal,gl)
 p=setup.make_merged_ball_values(merged_mean,merged_sigma)
 data=setup.convert_f_to_new_projection('berny',p,setup.omega)
 #plotter.merged_ball(data,mean)
@@ -954,7 +958,7 @@ for i in points_s[1:]:
     labels.append(label)
 #for i in labels:
 #    print(i)
-#plotter.linebatch_initial(points,labels,colors)
+plotter.linebatch_initial(points,labels,colors)
 goal=setup.convert_points_to_new_projection('berny',setup.goal)
 chosen_point=setup.convert_points_to_new_projection('berny',setup.chosen_point)
 #plotter.linebatch_initial_chosen(points,labels,colors,chosen_point)
@@ -992,35 +996,77 @@ labels=['Initial','1st Closest','2nd Closest']
 colors=['Blue','darkgreen','Lime']
 #plotter.second_chosen(points,end_points,labels,colors)
 
+#plot third p
 p=setup.values/np.sum(setup.values)
 data=setup.convert_f_to_new_projection('berny',p,setup.omega)
-plotter.p_third(data)
+#plotter.p_third(data)
 
+#choose third batch
 next_points=setup.choose_next_best_points_sphere(
-    'mean',5,80,radius_reduction=20)
+    'mean',5,80,set_radius=0.5)
+setup.sample_next_batch(
+    'provided',sigma,scale,delta,rietveld_closest=True,n_points=next_points)
 next_points_b=setup.convert_points_to_new_projection('berny',next_points)
-plotter.third_batch(next_points_b)
-#plotter.final(data,goal)
+#plotter.third_batch(next_points_b)
+chosen=setup.convert_points_to_new_projection('berny',setup.points[-1])
+#plotter.third_closest(chosen)
+
+#evaluate
+#plotter.final(chosen,goal)
+points=setup.convert_points_to_new_projection('berny',setup.points)
+print(points[-1],'closest berny')
+labels=['Initial','1st Closest','2nd Closest','3rd Closest']
+colors=['Blue','darkgreen','Lime','Turquoise']
+#plotter.final_testb(points,labels,colors,goal)
+#plotter.final_testa(data,goal)
 
 #print(next_points)
-closest_point=setup.get_closest_point(next_points,index=False)
-est_known=setup.get_estimated_known_composition(closest_point)
-closest_point=setup.convert_to_standard_basis(closest_point)
+est_known=setup.get_estimated_known_composition(setup.points[-1])
+closest_point=setup.convert_to_standard_basis(setup.points[-1])
 goal=setup.convert_to_standard_basis(setup.goal)
+print(goal,'goal')
+print(closest_point,'closest')
+print(est_known,'est known')
 #print(goal)
 #print(closest_point)
 #print(est_known)
-a=np.stack([est_known,closest_point])
+a=np.stack([est_known,goal])
 a=a.T
 #print(a)
-x=scipy.linalg.lstsq(a,goal)
-#print(x)
-#print(setup.get_closest_distance(next_points))
-#print(setup.sigma)
-'''
+x=scipy.linalg.lstsq(a,closest_point)
+k=x[0][0]*est_known
+u=x[0][1]*goal
+gt=u+k
+print('Solution')
+print(gt)
+print(closest_point)
+print(x[0])
+phases=['Li','Zn','Si','S']
+formula_known=setup.make_formula_for_molar_mass(phases,x[0][0]*est_known)
+formula_goal=setup.make_formula_for_molar_mass(phases,x[0][1]*goal)
+print(formula_known,'fk')
+print(formula_goal,'fg')
+mass_known=wt_convert.get_molar_mass(formula_known)[0]
+mass_goal=wt_convert.get_molar_mass(formula_goal)[0]
+print('mass known',mass_known)
+print('mass goal',mass_goal)
+goal_percent=mass_goal/(mass_goal+mass_known)
+print(round(100*goal_percent,8),'%')
 
-
-
+formula_known=setup.make_formula_for_molar_mass(phases,est_known)
+formula_goal=setup.make_formula_for_molar_mass(phases,goal)
+print('sumskg',np.sum(est_known),np.sum(goal))
+print(formula_known,'fk')
+print(formula_goal,'fg')
+mass_known=wt_convert.get_molar_mass(formula_known)[0]
+mass_goal=wt_convert.get_molar_mass(formula_goal)[0]
+print('mass known',mass_known)
+print('mass goal',mass_goal)
+goal_percent=mass_goal*x[0][1]/(mass_goal*x[0][1]+mass_known*x[0][0])
+known_percent=mass_known*x[0][0]/(mass_goal*x[0][1]+mass_known*x[0][0])
+print(round(100*goal_percent,8),'%')
+print(round(100*known_percent,8),'%')
+print('mass known = ',known_percent*0.5*10,'mg.')
 #code for getting resolution
 '''
 setup=all_information()
@@ -1138,6 +1184,7 @@ overseer.setup_test(
     output_file=output_file,num_trials=num_trials)
 '''
 #code for getting optimal radius Rietveld setup
+'''
 test=all_information()
 overseer=Results()
 
@@ -1178,6 +1225,7 @@ result_descriptors=['Closest distance', 'Radius']
 overseer.setup_test(
     setup_type,setup_args,test_type,test_args,result_descriptors,
     output_file=output_file,num_trials=num_trials)
+    '''
 
 #code for getting expected number of batches
 '''

@@ -50,12 +50,14 @@ class wt_converter:
         #function to get molar mass from a valid formula
         #formula must be a space seperated string 
         if formula is not None:
+            print(formula)
             formula=formula.upper().split()
             atomic_mass_float = 0.0
             invalid_input = False
             coefficient = 1
             formula_standard=[]
             for i, ch in enumerate(formula):
+                print('ch',ch)
                 if ch in self.elements_list:
                     element_mass = self.elements_dict.get(ch)
                     # If the next character is an integer, multiply the element's mass 
@@ -63,13 +65,14 @@ class wt_converter:
                     if len(formula)==i+1:
                         atomic_mass_float += element_mass
                     else:
-                        if formula[i + 1].isdigit() == True:
-                            atomic_mass_float += element_mass * int(formula[i + 1])
-                            formula_standard.append(int(formula[i+1]))
+                        try:
+                            c=float(formula[i+1])
+                            atomic_mass_float += element_mass * c
+                            formula_standard.append(c)
+                            print('c',c)
+                        except:
+                            pass
                     # If not, just add that element's mass to the sum.
-                        else:
-                            atomic_mass_float += element_mass
-                            formula_standard.append(1)
                 # If the charcter is an integer
                 elif ch.isdigit() == True:
                     # If the first index is an integer, assume that that is a
@@ -89,9 +92,12 @@ class wt_converter:
                 elif ch.isdigit() == True and len(formula) == 1:
                     invalid_input = True
                 # If a character is not an element or an integer, let the program know
-                # that there is an error.
                 else:
-                    invalid_input = True
+                    try:
+                        float(ch)
+                    except:
+                        # that there is an error.
+                        invalid_input = True
             # Muliply the entire atomic mass by the coefficient.
             atomic_mass_float *= coefficient
             # If there was an error in the program, display the appropriate error.
@@ -109,6 +115,7 @@ class wt_converter:
             # If there was no error, then print the claculated atomic mass
             else:
                 #print("Atomic Mass: ", round(atomic_mass_float, 3))
+                print('ggggggg')
                 return (atomic_mass_float,formula_standard)
 
     def test(self,f1,f2,w1,w2):

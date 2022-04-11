@@ -105,7 +105,8 @@ class Plotter:
         tax.line(mean,points[0],linestyle='--',linewidth=0.5,color='Green')
         tax.line(points[0],end_points[0],linewidth=0.5,color='Blue')
         self.set_aspect(fig,tax)
-        plt.show()
+        plt.savefig(self.directory + "mean_line.png")
+        #plt.show()
 
     def mean_small(self,mean,small_means,labels):
         fig, tax= ternary.figure(scale=100)
@@ -116,8 +117,21 @@ class Plotter:
         for point,label,c in zip(small_means,labels,colors):
             tax.scatter(
                 [point],label=label,color=c,**self.scatter_ka)
-        self.set_aspect(fig,tax) 
-        plt.savefig("../../mat presentation figures/test.png")
+        self.set_aspect(fig,tax)
+        plt.savefig(self.directory + "mean_small.png")
+        #plt.show()
+
+    def mean_all(self,initial,il,small_means,labels,goal,gl):
+        fig, tax=ternary.figure(scale=100)
+        self.tax_setup(tax,'line')
+        colors=['green','red','orange']
+        for point,label,c in zip(small_means,labels,colors):
+            tax.scatter(
+                [point],label=label,color=c,**self.scatter_ka)
+        tax.scatter([goal],label=gl,color='purple',**self.scatter_ka)
+        tax.scatter([initial],label='Initial sample',color='blue',**self.scatter_ka)
+        self.set_aspect(fig,tax)
+        plt.savefig(self.directory + "mean_all.png")
         plt.show()
 
     def merged_ball(self,data,mean):
@@ -127,7 +141,8 @@ class Plotter:
             [mean],label='K',color='Green',**self.scatter_ka)
         tax.heatmap(data=data,scale=100,cmap='Reds',cb_kwargs=self.cb_kwargs)
         self.set_aspect(fig,tax,kind='heat')
-        plt.show()
+        plt.savefig(self.directory + "mergedball.png")
+        #plt.show()
 
     def p_mean_initial(self,data,mean,points):
         fig,tax=ternary.figure(scale=100)
@@ -138,7 +153,8 @@ class Plotter:
             points,label='Initial',color='Blue',**self.scatter_ka)
         tax.heatmap(data=data,scale=100,cmap='Reds',cb_kwargs=self.cb_kwargs)
         self.set_aspect(fig,tax,kind='heat')
-        plt.show()
+        plt.savefig(self.directory + "p mean initial.png")
+        #plt.show()
 
     def linebatch_initial(self,points,labels,colors):
         fig,tax=ternary.figure(scale=100)
@@ -147,7 +163,8 @@ class Plotter:
             tax.scatter(
                 [point],label=label,color=color,**self.scatter_ka)
         self.set_aspect(fig,tax)
-        plt.show()
+        plt.savefig(self.directory + "linebatch_initial.png")
+        #plt.show()
 
     def linebatch_initial_chosen(self,points,labels,colors,chosen_point):
         fig,tax=ternary.figure(scale=100)
@@ -159,7 +176,8 @@ class Plotter:
             tax.scatter(
                 [point],color=color,**self.scatter_ka)
         self.set_aspect(fig,tax)
-        plt.show()
+        plt.savefig(self.directory + "linebatch_initial_chosen.png")
+        #plt.show()
 
     def first_chosen(self,ps,es,ls,cs):
         fig,tax=ternary.figure(scale=100)
@@ -169,14 +187,15 @@ class Plotter:
             tax.line(p,e,linewidth=0.5,color=c,zorder=7)
         self.set_aspect(fig,tax)
         plt.savefig(self.directory+'first_chosen.png',dpi=200)
-        plt.show()
+        #plt.show()
 
     def p_second_max(self,data,ps,es,ls,cs):
         fig,tax=ternary.figure(scale=100)
         self.tax_setup(tax,'heat')
         tax.heatmap(data=data,scale=100,cmap='Reds',cb_kwargs=self.cb_kwargs)
         self.set_aspect(fig,tax,kind='heat')
-        plt.show()
+        plt.savefig(self.directory + "p_second_max.png")
+        #plt.show()
 
     def p_second(self,data):
         fig,tax=ternary.figure(scale=100)
@@ -184,7 +203,7 @@ class Plotter:
         tax.heatmap(data=data,scale=100,cmap='Reds',cb_kwargs=self.cb_kwargs)
         self.set_aspect(fig,tax,kind='heat',labels=False)
         plt.savefig(self.directory + 'p_second.png',dpi=200)
-        plt.show()
+        #plt.show()
 
     def p_second_maxi_test(self,data,ps,es,ls,cs,mean,goal):
         fig,tax=ternary.figure(scale=100)
@@ -205,7 +224,7 @@ class Plotter:
             points,label='Batch 2',color='Lime',**self.scatter_ka)
         self.set_aspect(fig,tax)
         plt.savefig(self.directory + 'second_batch.png',dpi=200)
-        plt.show()
+        #plt.show()
 
     def second_chosen(self,ps,es,ls,cs):
         fig,tax=ternary.figure(scale=100)
@@ -215,35 +234,63 @@ class Plotter:
             tax.line(p,e,linewidth=0.5,color=c,zorder=7)
         self.set_aspect(fig,tax)
         plt.savefig(self.directory+'second_chosen.png',dpi=200)
-        plt.show()
+        #plt.show()
 
     def p_third(self,data):
         fig,tax=ternary.figure(scale=100)
         self.tax_setup(tax,'heat')
         tax.heatmap(data=data,scale=100,cmap='Reds',cb_kwargs=self.cb_kwargs)
-        self.set_aspect(fig,tax,kind='heat',labels='False')
+        self.set_aspect(fig,tax,kind='heat',labels=False)
         plt.savefig(self.directory+'p_third.png',dpi=200)
-        plt.show()
+        #plt.show()
 
     def third_batch(self,points):
         fig,tax=ternary.figure(scale=100)
         ka=self.scatter_ka
-        ka['s']=10
         self.tax_setup(tax,'heat')
         tax.scatter(
-            points,label='Batch 3',color='Turquoise',**ka)
+            points,label='Batch 3',color='Turquoise',**self.scatter_ka)
         self.set_aspect(fig,tax)
-        plt.savefig(self.directory + 'second_batch.png',dpi=200)
-        plt.show()
+        plt.savefig(self.directory + 'third_batch.png',dpi=200)
+        #plt.show()
 
-    def final(self,data,goal):
+    def third_closest(self,chosen):
         fig,tax=ternary.figure(scale=100)
         self.tax_setup(tax,'heat')
-        tax.heatmap(data=data,scale=100,cmap='Reds',cb_kwargs=self.cb_kwargs)
-        tax.scatter([goal],label='Unknown',color='Purple',**self.scatter_ka)
-        self.set_aspect(fig,tax,kind='heat')
-        plt.show()
+        tax.scatter(
+            [chosen],label='3rd Closest',color='Turquoise',**self.scatter_ka)
+        self.set_aspect(fig,tax)
+        plt.savefig(self.directory + 'third_closest.png',dpi=200)
+        #plt.show()
 
+    def final(self,closest,goal):
+        fig,tax=ternary.figure(scale=100)
+        self.tax_setup(tax,'heat')
+        tax.scatter([goal],label='U',color='Purple',**self.scatter_ka)
+        tax.scatter([closest],label='3rd Closest',color='Turquoise',**self.scatter_ka)
+        self.set_aspect(fig,tax)
+        plt.savefig(self.directory + 'final.png',dpi=200)
+        #plt.show()
+
+    def final_testa(self,data,goal):
+        fig,tax=ternary.figure(scale=100)
+        self.tax_setup(tax,'heat')
+        tax.scatter([goal],label='U',color='Purple',**self.scatter_ka)
+        tax.heatmap(data=data,scale=100,cmap='Reds',cb_kwargs=self.cb_kwargs)
+        self.set_aspect(fig,tax,kind='heat')
+        plt.savefig(self.directory + 'finala.png',dpi=200)
+        #plt.show()
+
+    def final_testb(self,points,labels,colors,goal):
+        fig,tax=ternary.figure(scale=100)
+        self.tax_setup(tax,'heat')
+        for p,l,c in zip(points,labels,colors):
+            tax.scatter(
+                [p],label=l,color=c,**self.scatter_ka)
+        tax.scatter([goal],label='U',color='Purple',**self.scatter_ka)
+        self.set_aspect(fig,tax)
+        plt.savefig(self.directory + 'finalb.png',dpi=200)
+        #plt.show()
 
     def process_a(self,goal,num_samples):
         self.cmap=get_cmap(num_samples+3)
