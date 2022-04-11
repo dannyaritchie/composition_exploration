@@ -2545,12 +2545,33 @@ class all_information:
         goal=self.convert_to_standard_basis(self.goal)/self.cube_size
         return np.linalg.norm(goal-chosen_point)
 
-    def get_max_individual_distance(self,next_points):
+    def get_chebyshev_distance(self,next_points):
         chosen_point=self.get_closest_point(next_points,index=False)
         chosen_point=(self.convert_to_standard_basis(chosen_point)
                       /self.cube_size)
         goal=self.convert_to_standard_basis(self.goal)/self.cube_size
         return np.abs(goal-chosen_point).max()
+
+    def get_expected_purity(self,next_points,initial_mass=0.5):
+        chosen_point=self.get_closest_point(next_points,index=False)
+        est_known=self.get_estimated_known_composition(chosen_point)
+        closest_point=self.convert_to_standard_basis(chosen_point)
+        goal=self.convert_to_standard_basis(self.goal)
+        a=np.stack([est_known,goal])
+        a=a.T
+        x=scipy.linalg.lstsq(a,closest_point)[0]
+
+        phases=['Li','Zn','Si','S']
+        wt_convert=wt_converter()
+        formula_known=self.make_formula_for_molar_mass(phases,est_known)
+        formula_goal=self.make_formula_for_molar_mass(phases,goal)
+        mass_known=wt_convert.get_molar_mass(formula_known)[0]
+        mass_goal=wt_convert.get_molar_mass(formula_goal)[0]
+
+        goal_percent=mass_goal*x[1]/(mass_goal*x[1]+mass_known*x[0])
+        known_percent=mass_known*x[0]/(mass_goal*x[1]+mass_known*x[0])
+        return (known_percent*initial_mass*10)
+
 
     def revert_to_initial(self):
         self.points=self.points[0:1]
@@ -2681,8 +2702,12 @@ class all_information:
         contained_point=contained_point*cube_size/np.sum(contained_point)
         sigma=np.diag(np.array([sigma]*con_dim))
 
-        self.closest_distances=np.zeros(num_batches)
-        self.max_individual_distances=np.zeros(num_batches)
+        if k.get('Closest distances'):
+            self.closest_distances=np.zeros(num_batches)
+        if k.get('Chebyshev distances'):
+            self.chebyshev_distances=np.zeros(num_batches)
+        if k.get('Expected purities'):
+            self.expected_purities=np.full((num_batches),100)
 
         self.setup(normal_vectors,contained_point,
                    cube_size,sigma)
@@ -2692,9 +2717,13 @@ class all_information:
             'lastline',sigma,scale,delta,batch_size=batch_size,
             rietveld_closest=rietveld_closest)
 
-        self.closest_distances[0]=self.get_closest_distance(self.points)
-        self.max_individual_distances[0]=self.get_max_individual_distance(
-            self.points)
+        if k.get('Closest distances'):
+            self.closest_distances[0]=self.get_closest_distance(self.points)
+        if k.get('Chebyshev distances'):
+            self.chebyshev_distances[0]=self.get_chebyshev_distance(
+                self.points)
+        if k.get('Expected purities'):
+            self.expected_purities[0]=self.get_expected_purity(self.points)
 
         if k.get('Max'):
             batch_size-=1
@@ -2706,9 +2735,13 @@ class all_information:
             if k.get('Max'):
                 f=self.values/np.sum(self.values)
                 next_points=np.append(next_points,[self.get_max(f)],axis=0)
+        if k.get('Closest distances'):
             self.closest_distances[i]=self.get_closest_distance(next_points)
-            self.max_individual_distances[i]=self.get_max_individual_distance(
+        if k.get('Chebyshev distances'):
+            self.chebyshev_distances[i]=self.get_chebyshev_distance(
                 next_points)
+        if k.get('Expected purities'):
+            self.expected_purities[i]=self.get_expected_purity(self.points)
 
             for point in next_points:
                 if np.all(point==self.goal):
@@ -3019,7 +3052,7 @@ class all_information:
             elif d == 'Batch number':
                 results=np.empty((len(self.closest_distances),3))
                 for n,(i,j) in enumerate(
-                    zip(self.closest_distances,self.max_individual_distances)):
+                    zip(self.closest_distances,self.chebyshev_distances)):
                     results[n]=np.array([n,i,j])
                 #return early as batch number has other descriptors for making
                 #dataframe (shouldnt be an issue but would print error)
@@ -3028,6 +3061,48 @@ class all_information:
                 print('Error: unknown result descriptor')
                 print(d)
         return np.array([result])
+
+    def test_k(self,k,result_descriptors):
+        values=self.values/np.sum(self.values)
+
+        if k.get('Multiple batches'):
+            res=[]
+            if k.get('Closest distances'):
+                res.append(self.closest_distances)
+            if k.get('Chebyshev distances'):
+                res.append(self.chebyshev_distances)
+            if k.get('Expected purities'):
+                res.append(self.expected_purities)
+            if len(res)==0:
+                print('Error, no result descriptors')
+            results=np.empty((len(res[0]),len(res)))
+            for i in range(len(res[0])):
+                for j in range(len(res)):
+                    results[i][j]=res[j][i]
+        else:
+            result=[]
+            if k.get('Variance'):
+                result.append(self.f_score(values,method='variance'))
+            if k.get('Mean distance'):
+                mean=self.get_mean(f=self.values)
+                result.append(np.linalg.norm(mean-self.goal))
+            if k.get('Max distance'):
+                centre=self.get_max(f=self.values)
+                result.append(np.linalg.norm(centre-self.goal))
+            if k.get('Standard deviation'):
+                result.append(np.sqrt(self.f_score(values,method='variance')))
+            if k.get('Variance from max'):
+                result.append(self.f_score(values,method='max_variance'))
+            if k.get('Distance mean max'):
+                centre=self.get_max(f=self.values)
+                mean=self.get_mean(f=self.values)
+                result.append(np.linalg.norm(mean-centre))
+            if k.get('Number samples'):
+                result.append(len(self.points))
+            if len(result)==0:
+                print('Error, no result descriptors')
+            results=np.array([result])
+        return results
 
 
 

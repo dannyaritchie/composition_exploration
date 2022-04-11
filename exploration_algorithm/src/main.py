@@ -876,6 +876,7 @@ for y in ys:
     plt.clf()
 '''
 #code for plotting matt presentation figs
+'''
 setup=all_information()
 normal_a = np.array([1,2,4,-2])
 normal_b = np.array([1,1,1,1])
@@ -922,12 +923,12 @@ end_points=setup.get_end_points('berny')
 #plotter.mean_line(points,end_points,mean)
 small_means=setup.convert_points_to_new_projection('berny',small_means)
 labels=['Li$_4$SiS (1.88M)','ZnS (2.79M)','Li$_2$S (1.33M)']
-plotter.mean_small(mean,small_means,labels)
+#plotter.mean_small(mean,small_means,labels)
 labels=['Li$_4$SiS','ZnS','Li$_2$So']
 gl='Li$_2$ZnSiS$_4$'
 goal=setup.convert_points_to_new_projection('berny',setup.goal)
-plotter.mean_all(
-    points[0],'Li$_24$Zn$_10$Si$_9$S$_40$',small_means,labels,goal,gl)
+#plotter.mean_all(
+#    points[0],'Li$_24$Zn$_10$Si$_9$S$_40$',small_means,labels,goal,gl)
 p=setup.make_merged_ball_values(merged_mean,merged_sigma)
 data=setup.convert_f_to_new_projection('berny',p,setup.omega)
 #plotter.merged_ball(data,mean)
@@ -1021,12 +1022,15 @@ colors=['Blue','darkgreen','Lime','Turquoise']
 #plotter.final_testa(data,goal)
 
 #print(next_points)
-est_known=setup.get_estimated_known_composition(setup.points[-1])
-closest_point=setup.convert_to_standard_basis(setup.points[-1])
-goal=setup.convert_to_standard_basis(setup.goal)
+est_known=setup.get_estimated_known_composition(setup.points[-1])/100
+closest_point=setup.convert_to_standard_basis(setup.points[-1])/100
+goal=setup.convert_to_standard_basis(setup.goal)/100
 print(goal,'goal')
 print(closest_point,'closest')
 print(est_known,'est known')
+print('hjasdfasdf',np.sum(closest_point))
+print('hjasdfasdf',np.sum(goal))
+print('hjasdfasdf',np.sum(est_known))
 #print(goal)
 #print(closest_point)
 #print(est_known)
@@ -1066,7 +1070,10 @@ goal_percent=mass_goal*x[0][1]/(mass_goal*x[0][1]+mass_known*x[0][0])
 known_percent=mass_known*x[0][0]/(mass_goal*x[0][1]+mass_known*x[0][0])
 print(round(100*goal_percent,8),'%')
 print(round(100*known_percent,8),'%')
+print(known_percent/goal_percent)
+print(goal_percent)
 print('mass known = ',known_percent*0.5*10,'mg.')
+'''
 #code for getting resolution
 '''
 setup=all_information()
@@ -1400,13 +1407,20 @@ overseer.setup_test(
     output_file=output_file,num_trials=num_trials)
     '''
 #code to test n batches
-'''
 test=all_information()
 overseer=Results()
 
 num_trials=1000
 output_file='../data/on_sphere_eval/n_batches_w_max_score_sig_new.csv'
 
+test_args={
+    'Multiple batches':True,
+    'Closest distances':True,
+    'Chebyshev distances':True,
+    'Expected purities':True,
+}
+
+test_type=test.test_k
 setup_args={
     'Normal a':[1,2,4,-2],
     'Normal b':[1,1,1,1],
@@ -1425,18 +1439,15 @@ setup_args={
     'Min angle':110,
     'Max':True,
 }
+setup_args.update(test_args)
 setup_type=test.setup_n_batches_recording
 
-test_args={
-}
-test_type=test.test
 
 result_descriptors=['Batch number','Closest distance',
                     'Max individual distance']
 overseer.setup_test(
     setup_type,setup_args,test_type,test_args,result_descriptors,
     output_file=output_file,num_trials=num_trials)
-    '''
 
 
 
