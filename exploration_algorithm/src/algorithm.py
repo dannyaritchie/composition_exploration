@@ -2993,6 +2993,7 @@ class all_information:
         return np.array([results])
 
     def test(self,k,result_descriptors):
+        print(a)
         values=self.values/np.sum(self.values)
 
         result=[]
