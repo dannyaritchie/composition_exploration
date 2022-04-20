@@ -672,6 +672,7 @@ class Plotter:
     def show_labels(self):
        self.show_labels=True
 
+
     def set_projection(self,elev,azim):
         self.ax.view_init(elev=elev,azim=azim)
         

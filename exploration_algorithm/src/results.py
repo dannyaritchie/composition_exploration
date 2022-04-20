@@ -187,6 +187,7 @@ class Results:
                     df[setup_type]=str(setup_args[setup_type])
         for test_type in test_args.keys():
             if not test_type in result_descriptors:
+                print(test_type)
                 df[test_type]=test_args[test_type]
 
         if output_file!="":
@@ -209,7 +210,7 @@ class Results:
             #+"batch setup with rietveld closest")
         plt.show()
 
-    def plot_line_melt(self,path,x,y1,y2,title=""):
+    def plot_lines_melt(self,path,x,y1,y2,title=""):
         test=all_information()
         normal_a = np.array([1,2,-2,-2])
         normal_b = np.array([1,1,1,1])
@@ -234,6 +235,49 @@ class Results:
             y=res,color='Red',
             label='Resolution:'+str(round(res,4)))
         plt.legend()
+        plt.title(title)
+        plt.show()
+
+    def plot_line_melt(self,path,x,y,title=""):
+        test=all_information()
+        normal_a = np.array([1,2,-2,-2])
+        normal_b = np.array([1,1,1,1])
+        normal_vectors=np.stack((normal_a,normal_b)) 
+        cube_size=100
+        contained_point=np.array([1,1,1,2])*cube_size/5
+        sigma=np.diag(np.array([0.1,0.1]))
+        test.setup(normal_vectors,contained_point,cube_size,sigma)
+        goal=[cube_size/2,cube_size/2]
+        test.goal=goal
+        point=[cube_size/2,cube_size/2]
+        point[0]-=1
+        point[1]+=1
+        points=np.array([point])
+        print(points)
+        
+        res=test.get_expected_purity(points,cheat=True)
+        print(res)
+        #a=np.array([0,0])
+        #b=np.array([0,1])
+        #a_s=test.convert_to_standard_basis(a)/cube_size
+        #b_s=test.convert_to_standard_basis(b)/cube_size
+        #res=np.abs(a_s-b_s).max()/2
+
+        df=pd.read_csv(path)
+        print(df.columns)
+        print(len(df))
+        #df=df.tail(10000)
+        print(df['Expected purities'])
+        df=df[[x,y]]
+        df=df.melt(x,var_name='Score type',value_name='Score')
+        ax=sns.lineplot(data=df,x=x,y='Score',hue='Score type')#.set_xlabel('K')#.set(
+            #title="Closest distance vs ball radius for n=6000 after line\n"
+            #+"batch setup with rietveld closest")
+        #ax.axhline(
+            #y=res,color='Red',
+            #label='Resolution:'+str(round(res,4)))
+        ax.set_ylabel('Expected purity / %')
+        ax.get_legend().remove()
         plt.title(title)
         plt.show()
 

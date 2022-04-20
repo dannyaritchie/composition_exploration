@@ -8,6 +8,41 @@ class visualise_square:
     
     def plot_omega(self,omega,ax=None,show=False,cube_size=None):
         self.plot_scatter(ax,omega,show,cube_size=cube_size)
+
+    def create_boundaries(self,A,contained_point):
+        p1=np.array([0,0,0,100])
+        p2=np.array([0,0,100,0])
+        p3=np.array([0,100,0,0])
+        p4=np.array([100,0,0,0])
+
+        sp1=p1-contained_point
+        sp1=np.einsum('ij,j',A,sp1)
+        sp2=p2-contained_point
+        sp2=np.einsum('ij,j',A,sp2)
+        sp3=p3-contained_point
+        sp3=np.einsum('ij,j',A,sp3)
+        sp4=p4-contained_point
+        sp4=np.einsum('ij,j',A,sp4)
+        print('-----------')
+        print('a',sp1)
+        print(sp2)
+        print(sp3)
+        print(sp4)
+
+        lines=[]
+        lines.append([sp1,sp2])
+        lines.append([sp1,sp3])
+        lines.append([sp1,sp4])
+        lines.append([sp2,sp3])
+        lines.append([sp2,sp4])
+        lines.append([sp3,sp4])
+        return lines
+
+
+    def add_boundary(self,ax,A,contained_point):
+        lines=self.create_boundaries(A,contained_point)
+        self.draw_lines(lines,ax,show=False)
+
     
     def plot_scatter_from_standard(self,ax,points_standard,show=True):
         xs=[None]*len(points_standard)
@@ -139,7 +174,7 @@ class visualise_square:
 
     def draw_lines(self,lines,ax,show=True,**kwargs):
         for line in lines:
-            print(line)
+            #print(line)
             ax.plot([line[0][0],line[1][0]],[line[0][1],line[1][1]],**kwargs)
         if show:
             plt.show()
@@ -202,3 +237,21 @@ class visualise_square:
             ax[1],points,show=False,label='Initial point',c='orange')
         self.draw_lines(lines,ax[1],show=False)
         plt.savefig(filename)
+
+    def estimated_known(self,closest,goal,est_known,A,contained_point,purity):
+        fig, ax=plt.subplots(1,1)
+        #ax.autoscale()
+        self.add_boundary(ax,A,contained_point)
+        print([closest[0]])
+        #ax.scatter(closest[0],closest[1],label='closest',color='red')
+        #ax.scatter(goal[0],goal[1],label='goal',color='green')
+        #ax.scatter(est_known[0],est_known[1],label='est_known',color='blue')
+        print('c:',closest)
+        print(goal)
+        print(est_known)
+        print('------------')
+        ax.legend()
+        ax.set_title(str(purity)+'%')
+
+        plt.show()
+

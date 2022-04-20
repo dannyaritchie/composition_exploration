@@ -1410,8 +1410,8 @@ overseer.setup_test(
 test=all_information()
 overseer=Results()
 
-num_trials=1000
-output_file='../data/on_sphere_eval/n_batches_w_max_score_sig_new.csv'
+num_trials=600
+output_file='../data/on_sphere_eval/n_batches_purity_6.csv'
 
 test_args={
     'Multiple batches':True,
@@ -1422,12 +1422,12 @@ test_args={
 
 test_type=test.test_k
 setup_args={
-    'Normal a':[1,2,4,-2],
-    'Normal b':[1,1,1,1],
-    'Cube size':100,
+    'Normal a':[2,2,4,-2,-1.,-1],
+    'Normal b':[1,1,1,1,1,1],
+    'Cube size':20,
     'Delta param':80,
     'Scale':1,
-    'Contained point':[2,1,1,4],
+    'Contained point':[1,1,1,4,1,1],
     'Sigma':0.3,
     'Rietveld closest':True,
     'Number of batches':10,
@@ -1443,8 +1443,8 @@ setup_args.update(test_args)
 setup_type=test.setup_n_batches_recording
 
 
-result_descriptors=['Batch number','Closest distance',
-                    'Max individual distance']
+result_descriptors=['Batch number','Closest distances','Chebyshev distances',
+                    'Expected purities']
 overseer.setup_test(
     setup_type,setup_args,test_type,test_args,result_descriptors,
     output_file=output_file,num_trials=num_trials)

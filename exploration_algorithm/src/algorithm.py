@@ -1874,9 +1874,19 @@ class all_information:
                 distance=-x/delta
                 if distance<mindist:
                     mindist=distance
-        est_known=goal_s+mindist/2*line
+        est_known=goal_s+mindist*line
         return est_known
         
+    def draw_estimated_known_composition(self,closest,purity):
+        
+        goal=self.goal
+        est_known=self.convert_point_to_constrained(
+            self.get_estimated_known_composition(closest))
+
+        plotter=visualise_square()
+        plotter.estimated_known(
+            closest,goal,est_known,self.basis,self.contained_point,purity)
+
     def make_formula_for_molar_mass(self,phases,composition):
         formula=""
         for p,c in zip(phases, composition):
@@ -2552,11 +2562,26 @@ class all_information:
         goal=self.convert_to_standard_basis(self.goal)/self.cube_size
         return np.abs(goal-chosen_point).max()
 
-    def get_expected_purity(self,next_points,initial_mass=0.5):
+    def get_expected_purity(self,next_points,cheat=False):
+
+        print('-0-----------')
+        print(self.goal)
         chosen_point=self.get_closest_point(next_points,index=False)
-        est_known=self.get_estimated_known_composition(chosen_point)
-        closest_point=self.convert_to_standard_basis(chosen_point)
-        goal=self.convert_to_standard_basis(self.goal)
+        print(chosen_point)
+        print('-0-----------')
+        if np.all(chosen_point==self.goal):
+            return 100
+        est_known=np.round(
+            self.get_estimated_known_composition(chosen_point),8)
+        closest_point=np.round(
+            self.convert_to_standard_basis(chosen_point),8)
+        goal=np.round(
+            self.convert_to_standard_basis(self.goal),8)
+        if cheat:
+            goaldist=np.linalg.norm(closest_point-goal)
+            est_known_dist=1
+            goal_percent=1-goaldist/(5+goaldist)
+            return goal_percent*100
         a=np.stack([est_known,goal])
         a=a.T
         x=scipy.linalg.lstsq(a,closest_point)[0]
@@ -2570,7 +2595,12 @@ class all_information:
 
         goal_percent=mass_goal*x[1]/(mass_goal*x[1]+mass_known*x[0])
         known_percent=mass_known*x[0]/(mass_goal*x[1]+mass_known*x[0])
-        return (known_percent*initial_mass*10)
+        #if goal_percent < 0:
+        #    print('es',est_known)
+        #    print('cp',closest_point)
+        #    print('g',goal)
+        self.draw_estimated_known_composition(chosen_point,goal_percent*100)
+        return (goal_percent*100)
 
 
     def revert_to_initial(self):
@@ -2723,7 +2753,8 @@ class all_information:
             self.chebyshev_distances[0]=self.get_chebyshev_distance(
                 self.points)
         if k.get('Expected purities'):
-            self.expected_purities[0]=self.get_expected_purity(self.points)
+            self.expected_purities[0]=self.get_expected_purity(
+                self.points,cheat=True)
 
         if k.get('Max'):
             batch_size-=1
@@ -2735,13 +2766,14 @@ class all_information:
             if k.get('Max'):
                 f=self.values/np.sum(self.values)
                 next_points=np.append(next_points,[self.get_max(f)],axis=0)
-        if k.get('Closest distances'):
-            self.closest_distances[i]=self.get_closest_distance(next_points)
-        if k.get('Chebyshev distances'):
-            self.chebyshev_distances[i]=self.get_chebyshev_distance(
-                next_points)
-        if k.get('Expected purities'):
-            self.expected_purities[i]=self.get_expected_purity(self.points)
+            if k.get('Closest distances'):
+                self.closest_distances[i]=self.get_closest_distance(next_points)
+            if k.get('Chebyshev distances'):
+                self.chebyshev_distances[i]=self.get_chebyshev_distance(
+                    next_points)
+            if k.get('Expected purities'):
+                self.expected_purities[i]=self.get_expected_purity(
+                    next_points,cheat=True)
 
             for point in next_points:
                 if np.all(point==self.goal):
@@ -3026,7 +3058,6 @@ class all_information:
         return np.array([results])
 
     def test(self,k,result_descriptors):
-        print(a)
         values=self.values/np.sum(self.values)
 
         result=[]
@@ -3075,10 +3106,11 @@ class all_information:
                 res.append(self.expected_purities)
             if len(res)==0:
                 print('Error, no result descriptors')
-            results=np.empty((len(res[0]),len(res)))
+            results=np.empty((len(res[0]),len(res)+1))
             for i in range(len(res[0])):
                 for j in range(len(res)):
-                    results[i][j]=res[j][i]
+                    results[i][0]=i
+                    results[i][j+1]=res[j][i]
         else:
             result=[]
             if k.get('Variance'):
