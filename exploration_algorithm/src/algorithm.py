@@ -66,6 +66,14 @@ def cartesian(arrays, out=None):
             out[j*m:(j+1)*m, 1:] = out[0:m, 1:]
     return out
 
+def cartesian_product_simple_transpose(arrays):
+    la = len(arrays)
+    dtype = np.result_type(*arrays)
+    arr = np.empty([la] + [len(a) for a in arrays], dtype=dtype)
+    for i, a in enumerate(np.ix_(*arrays)):
+        arr[i, ...] = a
+    return arr.reshape(la, -1).T
+
 def get_cmap(n, name='hsv'):
     '''Returns a function that maps each index in 0, 1, ..., n-1 to a distinct 
     RGB color; the keyword argument name must be a standard mpl colormap name.'''
@@ -1155,6 +1163,26 @@ class all_information:
         self.contained_point=contained_point
         self.normal_vectors=normal_vectors
         self.cube_size=cube_size
+        self.refine=0.5
+
+    def refine_omega(self):
+        self.refine/=2
+        scale_factor=pow(2,self.omega.shape[1])
+        if len(self.omega)*scale_factor<self.max_size:
+            omega_new=np.empty((
+                scale_factor*self.omega.shape[0],self.omega.shape[1]))
+            for n,point in enumerate(self.omega):
+                points=[]
+                for a in point:
+                    points.append(np.array([a,a+self.refine]))
+                new_points = np.array(
+                    cartesian_product_simple_transpose(points))
+                omega_new[n*scale_factor:(n+1)*scale_factor]=new_points
+            self.omega=omega_new
+
+    def reduce_omega_constrained(self):
+        delete=np.where(self.values==0)
+        self.omega=np.delete(self.omega,delete,axis=0)
 
     def random_point_constrained(self,n=1):
         choice = random.randrange(len(self.omega))
@@ -1799,12 +1827,17 @@ class all_information:
         p=np.zeros((len(omega)))
         p[selected_indexes]=p_reduced
         if not addition:
-            self.values=p
             if save_reduced:
-                self.omega_reduced=self.omega[selected_indexes]
-                self.values_reduced=p_reduced
+                self.omega=self.omega[selected_indexes]
+                self.values=p_reduced
+            else:
+                self.values=p
         else:
-            self.values=self.values*p
+            if save_reduced:
+                self.omega=self.omega[selected_indexes]
+                self.values=self.values[selected_indexes]*p_reduced
+            else:
+                self.values=self.values*p
 
 
 
@@ -2564,11 +2597,7 @@ class all_information:
 
     def get_expected_purity(self,next_points,cheat=False):
 
-        print('-0-----------')
-        print(self.goal)
         chosen_point=self.get_closest_point(next_points,index=False)
-        print(chosen_point)
-        print('-0-----------')
         if np.all(chosen_point==self.goal):
             return 100
         est_known=np.round(
@@ -2720,6 +2749,7 @@ class all_information:
         slope=k.get('Slope')
         intercept=k.get('Intercept')
         radius=k.get('Radius')
+        max_size=k.get('Max size')
         centre=k['Centre']
         batch_size=k['Batch size']
         min_angle=k['Min angle']
@@ -2738,6 +2768,8 @@ class all_information:
             self.chebyshev_distances=np.zeros(num_batches)
         if k.get('Expected purities'):
             self.expected_purities=np.full((num_batches),100)
+
+        self.max_size=max_size
 
         self.setup(normal_vectors,contained_point,
                    cube_size,sigma)
@@ -2760,6 +2792,11 @@ class all_information:
             batch_size-=1
 
         for i in range(1,num_batches):
+            print('n',i)
+            if self.max_size:
+                self.reduce_omega_constrained()
+                self.refine_omega()
+                self.make_p_gaussian(sigma,scale,delta)
             next_points=self.choose_next_best_points_sphere(
                 centre,batch_size,min_angle,slope=slope,intercept=intercept,
                 set_radius=radius)

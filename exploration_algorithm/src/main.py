@@ -1254,7 +1254,7 @@ setup_args={
     'Rietveld closest':True
 }
 setup_type=test.setup_one_batch_on_line
-
+3
 test_args={
     'Radius reduction':10,
     'Batch size':setup_args['Batch size'],
@@ -1407,9 +1407,10 @@ overseer.setup_test(
     output_file=output_file,num_trials=num_trials)
     '''
 #code to test n batches
+'''
 test=all_information()
 overseer=Results()
-
+3
 num_trials=600
 output_file='../data/on_sphere_eval/n_batches_purity_6.csv'
 
@@ -1448,6 +1449,68 @@ result_descriptors=['Batch number','Closest distances','Chebyshev distances',
 overseer.setup_test(
     setup_type,setup_args,test_type,test_args,result_descriptors,
     output_file=output_file,num_trials=num_trials)
+    '''
+#code to test grid refinement
+test=all_information()
+overseer=Results()
+3
+num_trials=600
+output_file='../data/on_sphere_eval/n_batches_purity_6.csv'
+
+test_args={
+    'Multiple batches':True,
+    'Closest distances':True,
+    'Chebyshev distances':True,
+    'Expected purities':True,
+}
+
+test_type=test.test_k
+setup_args={
+    'Normal a':[2,2,-2,-2],
+    'Normal b':[1,1,1,1],
+    'Cube size':100,
+    'Delta param':80,
+    'Scale':1,
+    'Contained point':[1,1,1,1],
+    'Sigma':0.3,
+    'Rietveld closest':True,
+    'Number of batches':20,
+    'Slope':2.29,
+    'Intercept':-65,
+    #'Radius':5,
+    'Centre':'mean',
+    'Batch size':5,
+    'Min angle':110,
+    'Max':True,
+    'Max size':1000, 
+}
+setup_args.update(test_args)
+setup_type=test.setup_n_batches_recording
+
+
+result_descriptors=['Batch number','Closest distances','Chebyshev distances',
+                    'Expected purities']
+overseer.setup_test(
+    setup_type,setup_args,test_type,test_args,result_descriptors,
+    output_file=output_file,num_trials=num_trials)
+'''
+test=all_information()
+normal_a = np.array([1,1,-1,-1])
+normal_b = np.array([1,1,1,1])
+normal_vectors=np.stack((normal_a,normal_b)) 
+cube_size=100
+contained_point=np.array([1,1,1,1])*cube_size/5
+sigma=np.diag([0.186,0.186])
+test.setup(normal_vectors,contained_point,cube_size,sigma)
+test.random_initialise(1)
+test.make_p_gaussian(sigma,1,1)
+test.reduce_omega_constrained()
+print(test.omega)
+test.max_size=3000
+test.refine_omega()
+print(test.omega)
+#test.setup(normal_vectors,contatined_point,cube_size,sigma)
+'''
 
 
 
