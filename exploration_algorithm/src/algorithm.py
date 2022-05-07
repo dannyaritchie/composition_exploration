@@ -15,7 +15,11 @@ from plotter import *
 from errorpropagator import *
 from visualisesquare import *
 from wtconversion import *
+from tetplotter import *
 from scipy import interpolate
+from scipy.spatial import ConvexHull, convex_hull_plot_2d
+
+
 SQRT3OVER2 = np.sqrt(3) / 2.
 
 @njit(parallel=True)
@@ -1368,27 +1372,81 @@ class all_information:
         self.points=x_sorted
         self.pawley_closer=[0,2]
         self.pawley_further=[2,5]
+
+    def get_plane_pawley(self,closer,further):
+        normal=further-closer
+        normal=normal/sum(normal)
+        midpoint=(closer+further)/2
+        a=normal[0]
+        b=normal[1]
+        c=normal[2]
+        d=-1*np.dot(normal,midpoint)
+        return [a,b,c,d]
     
-    def set_pawley_rank(self,pawley_rank=None):
-        if pawley_rank is None:
-            pawley_rank=[[[2,1,1,2,1],[2,1,1,3,0]],
-                         [[2,1,1,1.5,1.5]],
-                         [[2,1,1,1,2],[2,1,1,0,3]]]
-        pawley_rank_normal=[0]*len(pawley_rank)
-        for n,i in enumerate(pawley_rank):
-            rankeq = [0]*len(i)
-            for m,j in enumerate(i):
-                point = np.array(j)
-                if np.dot(self.normal_vectors[0],point)!=0:
-                    print('Error, given points do not obey constraints')
-                else:
-                    point=point/np.sum(point)
-                    point=np.einsum('ij,j',self.basis,point)
-                    rankeq[m]=point
-            pawley_rank_normal[n]=rankeq
-        self.pawley_rank = pawley_rank_normal
+    def transform_constraints(self):
+        dim=self.constrained_dim
+        if dim==3:
+            c00=[1,0,0,0,0,0]
+            c10=[0,1,0,0,0,0]
+            c20=[0,0,1,0,0,0]
+            c30=[0,0,0,1,0,0]
+            c40=[0,0,0,0,1,0]
+            c01=[1,0,0,0,0,1]
+            c11=[0,1,0,0,0,1]
+            c21=[0,0,1,0,0,1]
+            c31=[0,0,0,1,0,1]
+            c14=[0,0,0,0,1,1]
+            c00_p=self.convert_point_to_constrained(c00)
+            c10_p=self.convert_point_to_constrained(c10)
+            c20_p=self.convert_point_to_constrained(c20)
+            c30_p=self.convert_point_to_constrained(c30)
+            c40_p=self.convert_point_to_constrained(c40)
+            c01_p=self.convert_point_to_constrained(c01)
+            c11_p=self.convert_point_to_constrained(c11)
+            c21_p=self.convert_point_to_constrained(c21)
+            c31_p=self.convert_point_to_constrained(c31)
+            c41_p=self.convert_point_to_constrained(c41)
+            return [
+                c00_p,c10_p,c20_p,c30_p,c40_p,c01_p,c11_p,c21_p,c31_p,c41_p]
+
+    def convert_constraint_to_constrained(self,constraint):
+        if len(constraint)!=len(self.contained_point)+1:
+            print('Error, constraint dim does not match contatined point')
+        diff=0
+        for i,j in zip(constraint[:-1],self.contained_point):
+            diff+=i*j
+        k=diff+constraint[-1]
+        con_p=np.einsum('ij,j',self.basis,constraint[:-1])
+        con_p=np.append(con_p,k)
+        return con_p
+
+    def make_plane(self,closer,further):
+        constraints=self.transform_constraints
+        plane = self.get_plane_pawley(closer,further)
+        max_length = np.sqrt(5*self.cube_size**2)
+        max_co = math.floor(max_length)
+        ii = np.array(range(-max_co,max_co+1,1))
+        a=cartesian((ii,ii))
+        Z=(-plane[3]-plane[1]*a[:,1]-plane[0]*a[:,0])/plane[2]
+        plane_points=np.empty((len(a),3))
+        plane_points[:,0]=a[:,0]
+        plane_points[:,1]=a[:,1]
+        plane_points[:,2]=Z
+        plane_points_s=self.convert_to_standard_basis(plane_points)
+        plane_points_s=np.delete(plane_points_s,np.where(np.any(
+            (plane_points_s>self.cube_size)|(plane_points_s<0),
+            axis=1)),axis=0)
+        return plane_points_s
+        
+
+
+
+
+
+
 
     def set_pawley_rank_s(self,pawley_rank):
+        #for use when not all charge balanced
         pawley_rank_normal=[0]*len(pawley_rank)
         for n,i in enumerate(pawley_rank):
             rankeq = [0]*len(i)
@@ -1398,6 +1456,20 @@ class all_information:
                 rankeq[m]=point
             pawley_rank_normal[n]=rankeq
         self.pawley_rank = pawley_rank_normal
+
+    def set_pawley_rank(self,pawley_rank):
+        pawley_rank_normal=[0]*len(pawley_rank)
+        for n,i in enumerate(pawley_rank):
+            rankeq = [0]*len(i)
+            for m,j in enumerate(i):
+                point = self.convert_point_to_constrained(j)
+                rankeq[m]=point
+            pawley_rank_normal[n]=rankeq
+        self.pawley_rank = pawley_rank_normal
+        for i in self.pawley_rank:
+            print(i)
+
+
 
     def incorporate_pawley(self,kind='closer_further',plot=True):
         thrown=np.empty((0),dtype=int)
@@ -1581,7 +1653,7 @@ class all_information:
             plotter.plot_points(c='red')
             self.incorporate_pawley()
 
-    def plot_pawley_ranking(self,plotter=None):
+    def plot_pawley_ranking_s(self,plotter=None):
         show=False
         if plotter is None:
             plotter=Plotter(5)
@@ -1595,6 +1667,18 @@ class all_information:
             plotter.add_points(points)
             plotter.plot_points(show=show,label='Rank: ' +
                                 str(rank),color=cmap(rank),s=1)
+
+    def plot_pawley_ranking(self,plotter=None,show=False):
+        if plotter is None:
+            plotter=tetPlotter()
+        cmap = get_cmap(len(self.pawley_rank)+1)
+        for rank,i in enumerate(self.pawley_rank):
+            points=self.convert_to_standard_basis(i)
+            plotter.add_points(points)
+            plotter.plot_points(label='Rank: ' +str(rank),color=cmap(rank),s=1)
+            plotter.legend()
+        if show:
+            plt.show()
 
     def create_line_from_sample_test(self,normal_vectors,cube_size,
                                  contained_point,sigma=None):
@@ -1877,7 +1961,7 @@ class all_information:
         point_labels={'Initial':[0,1]}
         plotter.berny_testing(data,points,end_points,point_labels)
 
-    def random_initialise(self,n):
+    def random_initialise(self,n,maxdist=None):
         dim_constrained=(self.normal_vectors.shape[1]
                          -self.normal_vectors.shape[0])
         points=self.random_point_constrained(n=n+1)
@@ -1885,6 +1969,13 @@ class all_information:
         self.points=points[1:]
         self.lines=np.empty((0,dim_constrained))
         self.end_points=np.empty((0,dim_constrained))
+        
+        if maxdist:
+            dist = np.linalg.norm(self.goal-self.points[0])/self.cube_size
+            while dist > maxdist or dist ==0:
+                self.points[0]=self.random_point_constrained(n=1)
+                dist = np.linalg.norm(self.goal-self.points[0])/self.cube_size
+
         for i in range(n):
             self.create_line_from_sample_constrained(
                 dim_constrained,i,method='use_sigma',sigma=self.sigma)
@@ -2430,6 +2521,7 @@ class all_information:
                                 mean_label)
 
     def convert_point_to_constrained(self,point):
+        point=np.array(point)*self.cube_size/sum(point)
         point_s=point-self.contained_point
         point=np.einsum('ij,j',self.basis,point_s)
         return point
@@ -2444,7 +2536,7 @@ class all_information:
         self.sigmas=np.broadcast_to(
             sigma,(1,self.constrained_dim,self.constrained_dim))
         self.end_points=self.points+self.lines
-        return np.mean(osigma/distance)
+        return np.mean(sigma/distance)
 
     def add_line(self,line):
         self.lines = np.vstack([self.lines,line])
@@ -2487,6 +2579,24 @@ class all_information:
             plotter.plot_heatmap(
                 heatmap,self.xlim[0],self.xlim[1],self.ylim[0],self.ylim[1])
 
+    def set_next_batch(
+        self,method,batch_size):
+
+        next_points=None
+
+        if method=='lastline':
+            next_points=np.empty((batch_size,self.constrained_dim))
+            point=self.points[-1]
+            endpoint=self.get_end_points('constrained')[-1]
+            v=endpoint-point
+            distance=np.linalg.norm(v)
+            for i in range(1,batch_size):
+                next_points[i-1]=point+i/(batch_size)*v
+            next_points[batch_size-1]=endpoint
+
+        self.next_batch=next_points
+
+
     def sample_next_batch(
             self,method,sigma,scale,delta,num_points=None,
             num_targets=None,angular_equivalence=None,num_chosen=None,
@@ -2519,7 +2629,6 @@ class all_information:
             next_points=n_points
         else:
             print('Error: unknown method')
-
         if next_points is None:
             return False
 
@@ -2533,14 +2642,19 @@ class all_information:
             point_indexes=range(start,stop)
             self.update_values(point_indexes,sigma,scale,delta)
         else:
-            closest_point=self.get_closest_point(next_points,index=False)
-            self.points=np.append(self.points,[closest_point],axis=0)
-            i = len(self.points)-1
-            self.create_line_from_sample_constrained(
+            next_points_sorted=sorted(
+                next_points,key=lambda x:np.linalg.norm(x-self.goal))
+            if rietveld_closest is True:
+                rietveld_closest=1 # backwards compatability
+            self.points=np.append(
+                self.points,next_points_sorted[:rietveld_closest],axis=0)
+            for i in range(
+                    len(self.points)-rietveld_closest,len(self.points)):
+                self.create_line_from_sample_constrained(
                 self.constrained_dim,i,method='use_sigma',sigma=sigma)
             #self.update_values([i],sigma,scale,delta)
             self.make_p_gaussian(sigma,scale,delta)
-            self.chosen_point=closest_point
+            self.chosen_point=next_points_sorted[0]
         if return_points:
             return next_points
 
@@ -2608,8 +2722,7 @@ class all_information:
             self.convert_to_standard_basis(self.goal),8)
         if cheat:
             goaldist=np.linalg.norm(closest_point-goal)
-            est_known_dist=1
-            goal_percent=1-goaldist/(5+goaldist)
+            goal_percent=1-goaldist/(0.3+goaldist)
             return goal_percent*100
         a=np.stack([est_known,goal])
         a=a.T
@@ -2753,6 +2866,7 @@ class all_information:
         centre=k['Centre']
         batch_size=k['Batch size']
         min_angle=k['Min angle']
+        maxdist=k.get('Max start distance')
 
         con_dim=normal_a.shape[0]-2
         delta=cube_size/delta_param
@@ -2773,7 +2887,7 @@ class all_information:
 
         self.setup(normal_vectors,contained_point,
                    cube_size,sigma)
-        self.random_initialise(1)
+        self.random_initialise(1,maxdist=maxdist)
         self.make_p_gaussian(sigma,scale,delta)
         self.sample_next_batch(
             'lastline',sigma,scale,delta,batch_size=batch_size,
@@ -2792,7 +2906,6 @@ class all_information:
             batch_size-=1
 
         for i in range(1,num_batches):
-            print('n',i)
             if self.max_size:
                 self.reduce_omega_constrained()
                 self.refine_omega()

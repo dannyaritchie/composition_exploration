@@ -897,7 +897,7 @@ sampled_point=cube_size*sampled_point/np.sum(sampled_point)
 goal_point=cube_size*goal_point/np.sum(goal_point)
 setup.goal=setup.convert_point_to_constrained(goal_point)
 formulas=[f1,f2,f3]
-weights=[0.51,0.40,0.09]
+weights=[0.23,0.70,0.07]
 wt_convert=wt_converter()
 error_propagate=error_propagator(4,cube_size,contained_point)
 moles,moles_error,formulas_standard=wt_convert.wt_to_moles(
@@ -910,6 +910,9 @@ small_means,small_sigmas=error_propagate.get_small_balls_p(setup.basis)
 print(merged_sigma,'hhh')
 sigma=setup.add_first_sample(sampled_point,merged_mean,merged_sigma)
 print('!!!',sigma)
+print(setup.lines[0],'line')
+print(setup.points[0],'sampled_point')
+print(setup.goal,'goal')
 #delta=0.1
 #scale=1
 setup.calculate_p_from_samples(delta,scale)
@@ -920,13 +923,14 @@ plotter.set_directory('../../mat presentation figures/')
 points=setup.convert_points_to_new_projection('berny',setup.points)
 mean=setup.convert_points_to_new_projection('berny',merged_mean)
 end_points=setup.get_end_points('berny')
+goal=setup.convert_points_to_new_projection('berny',setup.goal)
 #plotter.mean_line(points,end_points,mean)
+plotter.line_goal(points[0],end_points[0],goal)
 small_means=setup.convert_points_to_new_projection('berny',small_means)
 labels=['Li$_4$SiS (1.88M)','ZnS (2.79M)','Li$_2$S (1.33M)']
 #plotter.mean_small(mean,small_means,labels)
 labels=['Li$_4$SiS','ZnS','Li$_2$So']
 gl='Li$_2$ZnSiS$_4$'
-goal=setup.convert_points_to_new_projection('berny',setup.goal)
 #plotter.mean_all(
 #    points[0],'Li$_24$Zn$_10$Si$_9$S$_40$',small_means,labels,goal,gl)
 p=setup.make_merged_ball_values(merged_mean,merged_sigma)
@@ -1410,9 +1414,8 @@ overseer.setup_test(
 '''
 test=all_information()
 overseer=Results()
-3
 num_trials=600
-output_file='../data/on_sphere_eval/n_batches_purity_6.csv'
+output_file='../data/on_sphere_eval/rietveld.csv'
 
 test_args={
     'Multiple batches':True,
@@ -1423,22 +1426,24 @@ test_args={
 
 test_type=test.test_k
 setup_args={
-    'Normal a':[2,2,4,-2,-1.,-1],
-    'Normal b':[1,1,1,1,1,1],
-    'Cube size':20,
+    'Normal a':[1,2,4,-2],
+    'Normal b':[1,1,1,1],
+    'Cube size':100,
     'Delta param':80,
     'Scale':1,
-    'Contained point':[1,1,1,4,1,1],
+    'Contained point':[2,1,1,4],
     'Sigma':0.3,
-    'Rietveld closest':True,
+    'Rietveld closest':2,
     'Number of batches':10,
     'Slope':2.29,
     'Intercept':-65,
     #'Radius':5,
     'Centre':'mean',
-    'Batch size':5,
-    'Min angle':110,
+    'Batch size':7,
+    'Min angle':50,
     'Max':True,
+    'Max size':10000,
+    'Max start distance':2,
 }
 setup_args.update(test_args)
 setup_type=test.setup_n_batches_recording
@@ -1451,9 +1456,9 @@ overseer.setup_test(
     output_file=output_file,num_trials=num_trials)
     '''
 #code to test grid refinement
+'''
 test=all_information()
 overseer=Results()
-3
 num_trials=600
 output_file='../data/on_sphere_eval/n_batches_purity_6.csv'
 
@@ -1493,7 +1498,6 @@ result_descriptors=['Batch number','Closest distances','Chebyshev distances',
 overseer.setup_test(
     setup_type,setup_args,test_type,test_args,result_descriptors,
     output_file=output_file,num_trials=num_trials)
-'''
 test=all_information()
 normal_a = np.array([1,1,-1,-1])
 normal_b = np.array([1,1,1,1])
@@ -1511,6 +1515,177 @@ test.refine_omega()
 print(test.omega)
 #test.setup(normal_vectors,contatined_point,cube_size,sigma)
 '''
+#code for plotting jon tets
+'''
+def find_orthonormal(A):
+    rand_vec=np.random.rand(A.shape[0],1)
+    A = np.hstack((A,rand_vec))
+    b = np.zeros(A.shape[1])
+    b[-1] = 1
+    x = np.linalg.lstsq(A.T,b,rcond=None)[0]
+    return x/np.linalg.norm(x)
+
+normal_a = [1,3,-2,-1,-1]
+normal_b = [1,1,1,1,1]
+normal_a=np.array(normal_a)/np.linalg.norm(normal_a)
+normal_b=np.array(normal_b)/np.linalg.norm(normal_b)
+normal_vectors=np.stack((normal_a,normal_b),axis=0)
+cube_size=25
+contained_point=[2,1,1,1,2]
+contained_point=cube_size*np.array(contained_point)/sum(contained_point)
+
+dim=normal_vectors.shape[1]
+plane_dim = dim-len(normal_vectors)
+max_length = np.sqrt(dim*cube_size**2)
+max_co = math.floor(max_length)
+normal_a = normal_vectors[0]
+normal_b = normal_vectors[1]
+x=np.empty((plane_dim,dim))
+A = np.stack((normal_a,normal_b),axis=1)
+B=A.T
+for i in range(plane_dim):
+    x[i] = find_orthonormal(A)
+    A = np.hstack((A,np.array([x[i]]).T))
+    B=np.append(B,[x[i]],axis=0)
+
+print(x)
+print(A)
+print(B)
+test=[1,2,3]
+testb=[0,0,1,2,3]
+print(np.einsum('ij,i',x,test))
+print(np.einsum('ij,i',B,testb))
+test=[3,2,2,3,2]
+
+test=np.array(test)/sum(test)
+contained_point=[2,1,1,1,2]
+contained_point=np.array(contained_point)/sum(contained_point)
+test=test-contained_point
+c_a=np.einsum('ij,j',x,test)
+c_b=np.einsum('ij,j',B,test)
+s_a=np.einsum('ij,i',x,c_a)
+s_b=np.einsum('ij,i',B,c_b)
+print(s_a+contained_point)
+print(s_b+contained_point)
+binv=np.linalg.inv(B)
+s=np.einsum('ij,j',binv,c_b)
+print(12*(s+contained_point))
+print(B)
+print(s)
+d=np.einsum('ij,i',x,c_a)
+print(d)
+'''
+'''
+test=np.array([3,4,4,5,2])
+test=cube_size*test/sum(test)
+test=test-contained_point
+print(np.dot(normal_b,test))
+print(np.dot(normal_a,test))
+test_c=np.einsum('ij,j',x,test)
+print(test_c)
+test_s=np.einsum('ij,i',x,test_c)
+print(np.dot(test_s,normal_b))
+print(test_s+contained_point)
+'''
+
+
+
+
+
+setup=all_information()
+phase_field=['Cs','Bi','Se','Cl','I']
+normal_a = [1,3,-2,-1,-1]
+normal_b = [1,1,1,1,1]
+normal_a=np.array(normal_a)/np.linalg.norm(normal_a)
+normal_b=np.array(normal_b)/np.linalg.norm(normal_b)
+normal_vectors=np.stack((normal_a,normal_b),axis=0)
+cube_size=25
+contained_point=[1,6,5,5,4]
+contained_point=cube_size*np.array(contained_point)/sum(contained_point)
+sigma=0.3
+setup.setup(normal_vectors,contained_point,cube_size,sigma)
+
+closer=setup.convert_point_to_constrained([1,6,5,5,4])
+further=setup.convert_point_to_constrained([2,1,1,1,2])
+plane_points=setup.make_plane(closer,further)
+print('hey',plane_points.shape)
+
+
+pawley_rank=[[[1,6,5,5,4]],
+             [[2,1,1,1,2]],
+             [[2,1,1,1.5,1.5]],
+             [[2,1,1,2,1]],
+             [[1,4,5,2,1]]]
+setup.set_pawley_rank(pawley_rank)
+#setup.plot_pawley_ranking()
+#setup.plot_pawley_ranking()
+
+f1='Cs 1 Bi 0 Se 0 Cl 1 I 0'
+f2='Cs 0 Bi 2 Se 3 Cl 0 I 0'
+f3='Cs 3 Bi 2 Se 0 Cl 0 I 9'
+sampled_point=np.array([2,1,1,1,2])
+sampled_point=cube_size*sampled_point/np.sum(sampled_point)
+formulas=[f1,f2,f3]
+weights=[0.6013,0.3077,0.0910]
+wt_convert=wt_converter()
+error_propagate=error_propagator(5,cube_size,contained_point)
+moles,moles_error,formulas_standard=wt_convert.wt_to_moles(
+    formulas,weights,weights_error=[0.05])
+error_propagate.set_moles_error(moles,formulas_standard,moles_error)
+merged_mean,merged_sigma=error_propagate.get_merged_balls_p(setup.basis)
+small_means,small_sigmas=error_propagate.get_small_balls_p(setup.basis)
+sigma=setup.add_first_sample(sampled_point,merged_mean,merged_sigma)
+
+setup.set_next_batch('lastline',5)
+
+'''
+plotter=tetPlotter()
+plotter.add_points(setup.convert_to_standard_basis(setup.next_batch))
+plotter.plot_points(label='Next batch',color='seagreen')
+setup.plot_pawley_ranking(plotter=plotter)
+plt.show()
+'''
+plotter=tetPlotter()
+plotter.add_points(setup.convert_to_standard_basis(setup.next_batch))
+plotter.plot_points(label='Next batch',color='seagreen')
+points=np.array([[1,0,0,1,0],[0,2,3,0,0],[3,2,0,0,9]])
+plotter.add_points(points)
+plotter.plot_points(label='known',color='purple')
+print(merged_mean)
+plotter.add_points([setup.convert_to_standard_basis(merged_mean)])
+plotter.plot_points(label='avg known',color='orange')
+plotter.plot_plane(plane_points)
+setup.plot_pawley_ranking(plotter=plotter)
+plt.show()
+
+
+setup.incorporate_pawley(kind='arbitrary_rank',plot=False)
+points=setup.get_uniform_from_pawley(plot=False,method='reduced_omega')
+print('a',len(points))
+p = Path('../testdata/suggestednextpoints.txt')
+if not p.is_file():
+    f = p.open(mode = 'a')
+    f.write('Points:\n')
+    f.close()
+f = p.open(mode = 'a')
+f.write('Points:\n')
+for n,i in enumerate(points):
+    print('Point ' + str(n) +': ',i)
+    print(np.dot(i,normal_vectors[0]))
+    f.write('\t'+str(i)+'\n')
+f.close()
+pawley_rank=[[[1,6,5,4,5]],
+             [[2,1,1,2,1]],
+             [[2,1,1,1.5,1.5]],
+             [[2,1,1,1,2]],
+             [[1,4,5,1,2]],
+             [[2,1,1,0,3],[2,1,1,3,0],[2,1,0,2,3],
+              [0,1,1,1,2],[2,0,1,1,2],[1,1,1,2,0],
+              [2,3,5,1,1]]]
+setup.set_pawley_rank_s(pawley_rank=pawley_rank)
+#jon_points=[[3.11,7.33,8.72,7.66,0],[2.30,8.15,9.20,6.18,2.17],[7.71,8.62,9.05,8.43,7.04],[0.80,13.16,13.41,13.11,0.35],[2.35,6.83,8.67,3.86,1.64]]
+jon_points=[[2.21,8.22,2.28,13.28,9.03],[1.07,5.44,0,11.09,5.61],[3.13,4.98,2.84,7.23,5.16],[1.83,5.22,1.20,8.05,7.04],[0.60,7.24,0.98,13.51,6.84]]
+setup.plot_points_jon(pawley_rank=True,points=jon_points)
 
 
 

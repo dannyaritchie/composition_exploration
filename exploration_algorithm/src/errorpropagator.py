@@ -19,22 +19,29 @@ class error_propagator:
         merged_mean_std=np.zeros(self.small_balls_mean_unnorm.shape[1])
         for i in range(len(moles)):
             merged_mean=merged_mean+self.moles[i]*self.small_balls_mean_unnorm[i]
-            merged_mean_std=merged_mean_std+(self.moles_error[i]*self.small_balls_mean_unnorm[i])**2
+            merged_mean_std=(merged_mean_std+
+                             (self.moles_error[i]*
+                              self.small_balls_mean_unnorm[i])**2)
         self.merged_mean=self.cube_size*merged_mean/np.sum(merged_mean)
-        self.merged_mean_std=self.cube_size*merged_mean_std**0.5/np.sum(merged_mean)
+        self.merged_mean_std=(self.cube_size*merged_mean_std**0.5
+                              /np.sum(merged_mean))
         self.merged_sigma = np.diag(self.merged_mean_std)
         #set small ball means and error
         #errors are scaled so that when combine the balls are of right scale
         self.weighted_moles_error=[0]*len(moles_error)
         for i in range(len(moles)):
-            weighted_mole_error=self.cube_size*moles_error[i]/np.sum(merged_mean)
+            weighted_mole_error=(self.cube_size*moles_error[i]
+                                 /np.sum(merged_mean))
             self.weighted_moles_error[i]=weighted_mole_error
         self.small_balls_sigma=np.empty((len(formulas),self.dim,self.dim))
         self.small_balls_mean=np.empty((self.small_balls_mean_unnorm.shape))
         for i in range(len(self.small_balls_mean)):
-            self.small_balls_mean[i]=self.cube_size*self.small_balls_mean_unnorm[i]/np.sum(self.small_balls_mean_unnorm[i])
+            self.small_balls_mean[i]=(self.cube_size
+                                      *self.small_balls_mean_unnorm[i]
+                                      /np.sum(self.small_balls_mean_unnorm[i]))
         for i in range(len(formulas)):
-            diag=np.array([x*self.weighted_moles_error[i] for x in formulas[i]])
+            diag=np.array(
+                [x*self.weighted_moles_error[i] for x in formulas[i]])
             self.small_balls_sigma[i] = np.diag(diag)
 
     def get_small_balls(self):
@@ -51,16 +58,20 @@ class error_propagator:
         return (self.merged_mean_p,self.merged_sigma_p)
 
     def project_merged_ball_onto_us(self,us):
-        self.merged_mean_p = np.empty((2))
-        self.merged_sigma_p = np.empty((2))
+        d=self.dim-2
+        self.merged_mean_p = np.empty((d))
+        self.merged_sigma_p = np.empty((d))
         merged_p=self.project_onto_us(us,self.merged_sigma,self.merged_mean)
         self.merged_mean_p=merged_p[0]
         self.merged_sigma_p=merged_p[1]
 
     def project_small_balls_onto_us(self,us):
-        self.small_balls_mean_p = np.empty((self.small_balls_mean.shape[0],2))
-        self.small_balls_sigma_p = np.empty((self.small_balls_sigma.shape[0],2))
-        for n,(mean,sigma) in enumerate(zip(self.small_balls_mean,self.small_balls_sigma)):
+        d=self.dim-2
+        self.small_balls_mean_p = np.empty((self.small_balls_mean.shape[0],d))
+        self.small_balls_sigma_p = np.empty(
+            (self.small_balls_sigma.shape[0],d))
+        for n,(mean,sigma) in enumerate(
+                zip(self.small_balls_mean,self.small_balls_sigma)):
             small_balls_p=self.project_onto_us(us,sigma,mean)
             self.small_balls_mean_p[n]=small_balls_p[0]
             self.small_balls_sigma_p[n]=small_balls_p[1]

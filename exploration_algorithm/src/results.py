@@ -205,25 +205,21 @@ class Results:
     def plot_line(self,path,x,y):
         df=pd.read_csv(path)
         #df=df[df[x]<=2]
-        sns.lineplot(data=df,x=x,y=y)#.set_xlabel('K')#.set(
+        sns.lineplot(data=df,x=x,y=y,ci=100)#.set_xlabel('K')#.set(
+            #title="Closest distance vs ball radius for n=6000 after line\n"
+            #+"batch setup with rietveld closest")
+        plt.show()
+
+
+    def plot_lines(self,path,x,y,hue):
+        df=pd.read_csv(path)
+        #df=df[df[x]<=2]
+        sns.lineplot(data=df,x=x,y=y,hue=hue,ci=None)#.set_xlabel('K')#.set(
             #title="Closest distance vs ball radius for n=6000 after line\n"
             #+"batch setup with rietveld closest")
         plt.show()
 
     def plot_lines_melt(self,path,x,y1,y2,title=""):
-        test=all_information()
-        normal_a = np.array([1,2,-2,-2])
-        normal_b = np.array([1,1,1,1])
-        normal_vectors=np.stack((normal_a,normal_b)) 
-        cube_size=100
-        contained_point=np.array([1,1,1,2])*cube_size/5
-        sigma=np.diag(np.array([0.1,0.1]))
-        test.setup(normal_vectors,contained_point,cube_size,sigma)
-        a=np.array([0,0])
-        b=np.array([0,1])
-        a_s=test.convert_to_standard_basis(a)/cube_size
-        b_s=test.convert_to_standard_basis(b)/cube_size
-        res=np.abs(a_s-b_s).max()/2
 
         df=pd.read_csv(path)
         df=df[[x,y1,y2]]
@@ -231,9 +227,6 @@ class Results:
         ax=sns.lineplot(data=df,x=x,y='Score',hue='Score type')#.set_xlabel('K')#.set(
             #title="Closest distance vs ball radius for n=6000 after line\n"
             #+"batch setup with rietveld closest")
-        ax.axhline(
-            y=res,color='Red',
-            label='Resolution:'+str(round(res,4)))
         plt.legend()
         plt.title(title)
         plt.show()
@@ -270,7 +263,7 @@ class Results:
         print(df['Expected purities'])
         df=df[[x,y]]
         df=df.melt(x,var_name='Score type',value_name='Score')
-        ax=sns.lineplot(data=df,x=x,y='Score',hue='Score type')#.set_xlabel('K')#.set(
+        ax=sns.lineplot(data=df,x=x,y='Score',hue='Score type',ci=100)#.set_xlabel('K')#.set(
             #title="Closest distance vs ball radius for n=6000 after line\n"
             #+"batch setup with rietveld closest")
         #ax.axhline(
