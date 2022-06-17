@@ -140,7 +140,7 @@ class wt_converter:
             elif len(weights_error)!=len(formulas):
                 print('Error - number of errors must be 1 or number of inputs')
         else:
-            weights_error = [0.03]*len(formulas)
+            weights_error = [0.035*x+0.835 for x in weights]
         if total_mass is None:
             total_mass=0.5
         if total_mass_error is None:

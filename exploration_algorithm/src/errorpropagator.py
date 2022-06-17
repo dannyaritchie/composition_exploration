@@ -25,7 +25,7 @@ class error_propagator:
         self.merged_mean=self.cube_size*merged_mean/np.sum(merged_mean)
         self.merged_mean_std=(self.cube_size*merged_mean_std**0.5
                               /np.sum(merged_mean))
-        self.merged_sigma = np.diag(self.merged_mean_std)
+        self.merged_sigma = np.diag(self.merged_mean_std**2)
         #set small ball means and error
         #errors are scaled so that when combine the balls are of right scale
         self.weighted_moles_error=[0]*len(moles_error)
@@ -133,12 +133,11 @@ class error_propagator:
             print('Error, projection vectors must have same dimension as space')
         else:
             self.us=us
+            print('hey')
+            print(us.shape)
             mean=mean-self.contained_point
             projected_means=np.einsum('ij,j',us,mean)
-            projected_sigmas=np.empty((len(us)))
-            for n,u in enumerate(us):
-                projected_sigma=np.array([np.einsum('k,kl,l',u,sigma,u)])
-                projected_sigmas[n]=projected_sigma
+            projected_sigmas=np.einsum('ij,jk,kl',us,sigma,us.T)
             if sigma is None:
                 self.projected_sigmas=projected_sigmas
                 self.projected_means=projected_means

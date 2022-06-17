@@ -193,14 +193,25 @@ class visualise_square:
         self.plot_heatmap(d3,xlim[0],xlim[1],ylim[0],ylim[1],ax=ax[2],show=False)
         plt.show()
 
+    def test_heatb(self,heatmap,xlim,ylim):
+        f,ax=plt.subplots(1,1)
+        self.plot_heatmap(heatmap,xlim[0],xlim[1],ylim[0],ylim[1],ax=ax,show=False)
+        plt.show()
+        
     def process_fig(self):
         self.f,self.axs=plt.subplots(2,3)
 
-    def goal_fig(self,goal,points,lines,ax=None,show=True,lims=None):
+    def goal_fig(self,goal,points,lines,mean,ax=None,show=True,lims=None):
         if ax is None:
             fig=plt.figure()
             ax=fig.add_subplot(1,1,1)
-        self.plot_scatter(ax,goal,show=False,lim=False,marker='x',c='red',label='Goal')
+        print(goal)
+        self.plot_scatter(
+            ax,np.array([goal]),show=False,lim=False,marker='x',c='red',
+            label='Goal')
+        self.plot_scatter(
+            ax,np.array([mean]),show=False,lim=False,marker='x',c='orange',
+            label='mean')
         self.plot_scatter(ax,points,show=False,lim=None,label='Sample point')
         self.draw_lines(lines,ax,show=False)
         ax.legend()

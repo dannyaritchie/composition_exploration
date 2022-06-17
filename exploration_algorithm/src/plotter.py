@@ -10,12 +10,11 @@ def get_cmap(n, name='hsv'):
     RGB color; the keyword argument name must be a standard mpl colormap name.'''
     return plt.cm.get_cmap(name, n)
 
-            
 class Plotter:
 
     def __init__(self,which):
         self.which=which
-    
+
     def berny_testing(self,data,points,end_points,point_labels=None):
         fig, axs = plt.subplots(1,2)
         taxa=self.create_fig(ax=axs[0])
@@ -38,9 +37,9 @@ class Plotter:
 
     def tax_setup(self,tax,method):
         fontsize=10
-        tax.top_corner_label('ZnS',fontsize=fontsize,offset=0.15)
-        tax.right_corner_label('Li$_2$S',fontsize=fontsize,offset=0.05)
-        tax.left_corner_label('SiS',fontsize=fontsize,offset=0.05)
+        tax.top_corner_label(self.top,fontsize=fontsize,offset=0.15)
+        tax.right_corner_label(self.right,fontsize=fontsize,offset=0.05)
+        tax.left_corner_label(self.left,fontsize=fontsize,offset=0.05)
         tax.clear_matplotlib_ticks()
         tax.get_axes().axis('off')
         tax.boundary(linewidth=0.5)
@@ -74,6 +73,43 @@ class Plotter:
 
     def set_directory(self,directory):
         self.directory=directory
+
+    def mean_line_small(self,points,end_points,mean,small_means):
+        fig, tax= ternary.figure(scale=100)
+        self.tax_setup(tax,'line')
+        tax.scatter(
+            points,label='Initial',color='Blue',**self.scatter_ka)
+        tax.scatter(
+            [mean],label='K',color='Green',**self.scatter_ka)
+        tax.line(mean,points[0],linestyle='--',linewidth=0.5,color='Green')
+        tax.line(points[0],end_points[0],linewidth=0.5,color='Blue')
+        labels=['LiBr','CaBr$_2$']
+        cs=['red','orange']
+        for point,label,c in zip(small_means,labels,cs):
+            tax.scatter(
+                [point],label=label,color=c,**self.scatter_ka)
+        self.set_aspect(fig,tax)
+        plt.savefig(self.directory + "mean_line_small.png")
+        #plt.show()
+
+    def mean_line_small_old(self,points,end_points,mean,small_means,old):
+        fig, tax= ternary.figure(scale=100)
+        self.tax_setup(tax,'line')
+        tax.scatter(
+            points,label='Initial',color='Blue',**self.scatter_ka)
+        tax.scatter(
+            old,label='Other sampled',color='red',**self.scatter_ka)
+        tax.scatter(
+            [mean],label='K',color='Green',**self.scatter_ka)
+        tax.line(mean,points[0],linestyle='--',linewidth=0.5,color='Green')
+        tax.line(points[0],end_points[0],linewidth=0.5,color='Blue')
+        labels=['LiBr','CaBr$_2$']
+        for point,label in zip(small_means,labels):
+            tax.scatter(
+                [point],label=label,color='orange',**self.scatter_ka)
+        self.set_aspect(fig,tax)
+        plt.savefig(self.directory + "mean_line_small_old.png")
+        #plt.show()
 
     def mean_line(self,points,end_points,mean):
         fig, tax= ternary.figure(scale=100)
@@ -114,7 +150,7 @@ class Plotter:
         plt.savefig(self.directory + "mean_all.png")
         plt.show()
 
-    def merged_ball(self,data,mean):
+    def merged_ball(self,data,mean,show=True):
         fig,tax=ternary.figure(scale=100)
         self.tax_setup(tax,'heat')
         tax.scatter(
@@ -122,9 +158,10 @@ class Plotter:
         tax.heatmap(data=data,scale=100,cmap='Reds',cb_kwargs=self.cb_kwargs)
         self.set_aspect(fig,tax,kind='heat')
         plt.savefig(self.directory + "mergedball.png")
-        #plt.show()
+        if show:
+            plt.show()
 
-    def p_mean_initial(self,data,mean,points):
+    def p_mean_initial(self,data,mean,points,show=False):
         fig,tax=ternary.figure(scale=100)
         self.tax_setup(tax,'heat')
         tax.scatter(
@@ -134,7 +171,8 @@ class Plotter:
         tax.heatmap(data=data,scale=100,cmap='Reds',cb_kwargs=self.cb_kwargs)
         self.set_aspect(fig,tax,kind='heat')
         plt.savefig(self.directory + "p mean initial.png")
-        #plt.show()
+        if show:
+            plt.show()
 
     def linebatch_initial(self,points,labels,colors):
         fig,tax=ternary.figure(scale=100)

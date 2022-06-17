@@ -10,6 +10,7 @@ from wtconversion import *
 from errorpropagator import * 
 from dataparser import *
 from results import *
+from datainput import *
 import seaborn as sns
 
 #add test comment
@@ -936,6 +937,60 @@ gl='Li$_2$ZnSiS$_4$'
 p=setup.make_merged_ball_values(merged_mean,merged_sigma)
 data=setup.convert_f_to_new_projection('berny',p,setup.omega)
 #plotter.merged_ball(data,mean)
+'
+f2='Li 0 Ca 1 Zr 0 Br 2'
+
+sampled_point=[2,1,2,12]
+weights=[21.42,78.58]
+formulas=[f1,f2]
+
+setup=all_information()
+phase_field=['Li','Ca','Zr','Br']
+normal_a = [1,2,4,-1]
+normal_b = [1,1,1,1]
+normal_a=np.array(normal_a)/np.linalg.norm(normal_a)
+normal_b=np.array(normal_b)/np.linalg.norm(normal_b)
+normal_vectors=np.stack((normal_a,normal_b),axis=0)
+cube_size=50
+contained_point=[1,1,1,7]
+contained_point=cube_size*np.array(contained_point)/sum(contained_point)
+sigma=0.3
+setup.setup(normal_vectors,contained_point,cube_size,sigma)
+
+sampled_point=cube_size*np.array(sampled_point)/np.sum(sampled_point)
+wt_convert=wt_converter()
+error_propagate=error_propagator(4,cube_size,contained_point)
+moles,moles_error,formulas_standard=wt_convert.wt_to_moles(
+    formulas,weights,weights_error=[0.05])
+error_propagate.set_moles_error(moles,formulas_standard,moles_error)
+merged_mean,merged_sigma=error_propagate.get_merged_balls_p(setup.basis)
+print(merged_sigma)
+small_means,small_sigmas=error_propagate.get_small_balls_p(setup.basis)
+sigma=setup.add_first_sample(sampled_point,merged_mean,merged_sigma)
+points=setup.convert_points_to_new_projection('berny',setup.points)
+end_points=setup.get_end_points('berny')
+mean=setup.convert_points_to_new_projection('berny',merged_mean)
+small_means=setup.convert_points_to_new_projection('berny',small_means)
+
+plotter=Plotter('Berny')
+plotter.set_scatter_kwargs()
+plotter.set_heat_cbar_kwargs()
+plotter.set_directory('../../yun/')
+plotter.top='CaBr$_2$'
+plotter.left='ZrBr$_4$'
+plotter.right='LiBr'
+
+#plotter.mean_line_small(points,end_points,mean,small_means)
+
+#p=setup.make_merged_ball_values(merged_mean,merged_sigma)
+#data=setup.convert_f_to_new_projection('berny',p,setup.omega)
+#plotter.merged_ball(data,mean)
+
+print(setup.sigmas[0])
+setup.calculate_p_from_samples(1,1)
+data=setup.convert_f_to_new_projection('berny',setup.values,setup.omega)
+plotter.p_mean_initial(data,mean,points,show=True)
+
 data=setup.convert_f_to_new_projection('berny',setup.values,setup.omega)
 #d0=setup.make_heatmap_constrained()
 #plotter.p_mean_initial(data,mean,points)
@@ -1104,7 +1159,61 @@ print(np.abs(a_s-b_s).max())
 
 '''
 #code for getting results from setup
-test=all_information()
+test=all_inf'
+f2='Li 0 Ca 1 Zr 0 Br 2'
+
+sampled_point=[2,1,2,12]
+weights=[21.42,78.58]
+formulas=[f1,f2]
+
+setup=all_information()
+phase_field=['Li','Ca','Zr','Br']
+normal_a = [1,2,4,-1]
+normal_b = [1,1,1,1]
+normal_a=np.array(normal_a)/np.linalg.norm(normal_a)
+normal_b=np.array(normal_b)/np.linalg.norm(normal_b)
+normal_vectors=np.stack((normal_a,normal_b),axis=0)
+cube_size=50
+contained_point=[1,1,1,7]
+contained_point=cube_size*np.array(contained_point)/sum(contained_point)
+sigma=0.3
+setup.setup(normal_vectors,contained_point,cube_size,sigma)
+
+sampled_point=cube_size*np.array(sampled_point)/np.sum(sampled_point)
+wt_convert=wt_converter()
+error_propagate=error_propagator(4,cube_size,contained_point)
+moles,moles_error,formulas_standard=wt_convert.wt_to_moles(
+    formulas,weights,weights_error=[0.05])
+error_propagate.set_moles_error(moles,formulas_standard,moles_error)
+merged_mean,merged_sigma=error_propagate.get_merged_balls_p(setup.basis)
+print(merged_sigma)
+small_means,small_sigmas=error_propagate.get_small_balls_p(setup.basis)
+sigma=setup.add_first_sample(sampled_point,merged_mean,merged_sigma)
+points=setup.convert_points_to_new_projection('berny',setup.points)
+end_points=setup.get_end_points('berny')
+mean=setup.convert_points_to_new_projection('berny',merged_mean)
+small_means=setup.convert_points_to_new_projection('berny',small_means)
+
+plotter=Plotter('Berny')
+plotter.set_scatter_kwargs()
+plotter.set_heat_cbar_kwargs()
+plotter.set_directory('../../yun/')
+plotter.top='CaBr$_2$'
+plotter.left='ZrBr$_4$'
+plotter.right='LiBr'
+
+#plotter.mean_line_small(points,end_points,mean,small_means)
+
+#p=setup.make_merged_ball_values(merged_mean,merged_sigma)
+#data=setup.convert_f_to_new_projection('berny',p,setup.omega)
+#plotter.merged_ball(data,mean)
+
+print(setup.sigmas[0])
+setup.calculate_p_from_samples(1,1)
+data=setup.convert_f_to_new_projection('berny',setup.values,setup.omega)
+plotter.p_mean_initial(data,mean,points,show=True)
+
+ormation()
 overseer=Results()
 
 num_trials=6000
@@ -1175,7 +1284,7 @@ setup_args={
                 'Li 0 Zn 1 Si 0 S 1',
                 'Li 2 Zn 0 Si 0 S 1'],
     'sampled_point':[24,10,9,40],
-    'goal_point':[2,1,1,4],
+    'goatop='CaBr$_2$',left='ZrBr$_4$',right='LiBr'l_point':[2,1,1,4],
     'weights':[0.51,0.40,0.09],
     'weight_error':[0.05],
 }
@@ -1390,7 +1499,7 @@ output_file='../data/on_sphere_eval/var_mean_sig.csv'
 
 setup_args={
     'Normal a':[1,2,4,-2],
-    'Normal b':[1,1,1,1],
+    'Normal b':[1,1,1,1],top='CaBr$_2$',left='ZrBr$_4$',right='LiBr'
     'Cube size':100,
     'Delta param':80,
     'Scale':1,
@@ -1468,7 +1577,7 @@ test_args={
     'Chebyshev distances':True,
     'Expected purities':True,
 }
-
+Parameter A
 test_type=test.test_k
 setup_args={
     'Normal a':[2,2,-2,-2],
@@ -1591,7 +1700,7 @@ print(test_s+contained_point)
 
 
 
-
+'''
 setup=all_information()
 phase_field=['Cs','Bi','Se','Cl','I']
 normal_a = [1,3,-2,-1,-1]
@@ -1637,6 +1746,7 @@ small_means,small_sigmas=error_propagate.get_small_balls_p(setup.basis)
 sigma=setup.add_first_sample(sampled_point,merged_mean,merged_sigma)
 
 setup.set_next_batch('lastline',5)
+'''
 
 '''
 plotter=tetPlotter()
@@ -1644,6 +1754,7 @@ plotter.add_points(setup.convert_to_standard_basis(setup.next_batch))
 plotter.plot_points(label='Next batch',color='seagreen')
 setup.plot_pawley_ranking(plotter=plotter)
 plt.show()
+'''
 '''
 plotter=tetPlotter()
 plotter.add_points(setup.convert_to_standard_basis(setup.next_batch))
@@ -1663,7 +1774,7 @@ setup.incorporate_pawley(kind='arbitrary_rank',plot=False)
 points=setup.get_uniform_from_pawley(plot=False,method='reduced_omega')
 print('a',len(points))
 p = Path('../testdata/suggestednextpoints.txt')
-if not p.is_file():
+if not p.i'Li$_2$S's_file():
     f = p.open(mode = 'a')
     f.write('Points:\n')
     f.close()
@@ -1686,6 +1797,176 @@ setup.set_pawley_rank_s(pawley_rank=pawley_rank)
 #jon_points=[[3.11,7.33,8.72,7.66,0],[2.30,8.15,9.20,6.18,2.17],[7.71,8.62,9.05,8.43,7.04],[0.80,13.16,13.41,13.11,0.35],[2.35,6.83,8.67,3.86,1.64]]
 jon_points=[[2.21,8.22,2.28,13.28,9.03],[1.07,5.44,0,11.09,5.61],[3.13,4.98,2.84,7.23,5.16],[1.83,5.22,1.20,8.05,7.04],[0.60,7.24,0.98,13.51,6.84]]
 setup.plot_points_jon(pawley_rank=True,points=jon_points)
+'''
+#code for verifying yun1
+'''
+# Li B O Br
+f1='Li 2 B 0 O 1 Br 0'
+f2='Li 3 B 0 O 1 Br 1'
+f3='Li 3 B 1 O 3 Br 0'
+f4='Li 1 B 0 O 0 Br 1'
+
+sampled_pointa=[16,2,10,2]
+weightsa=[0.505,0.039,0.0255]
+formulasa=[f1,f2,f3]
+
+setup=all_information()
+phase_field=['Li','B','O','Br']
+normal_a = [1,3,-2,-1]
+normal_b = [1,1,1,1]
+normal_a=np.array(normal_a)/np.linalg.norm(normal_a)
+normal_b=np.array(normal_b)/np.linalg.norm(normal_b)
+normal_vectors=np.stack((normal_a,normal_b),axis=0)
+cube_size=25
+contained_point=[1,1,1,1]
+contained_point=cube_size*np.array(contained_point)/sum(contained_point)
+sigma=0.3
+setup.setup(normal_vectors,contained_point,cube_size,sigma)
+
+sampled_point=cube_size*np.array(sampled_point)/np.sum(sampled_point)
+wt_convert=wt_converter()
+error_propagate=error_propagator(4,cube_size,contained_point)
+moles,moles_error,formulas_standard=wt_convert.wt_to_moles(
+    formulas,weights,weights_error=[0.05])
+print(moles)
+error_propagate.set_moles_error(moles,formulas_standard,moles_error)
+merged_mean,merged_sigma=error_propagate.get_merged_balls_p(setup.basis)
+small_means,small_sigmas=error_propagate.get_small_balls_p(setup.basis)
+sigma=setup.add_first_sample(sampled_point,merged_mean,merged_sigma)
+
+plotter=visualise_square()
+goal=[6,1,3,3]
+goal_con=setup.convert_point_to_constrained(goal)
+setup.create_plot_lines()
+plotter.goal_fig(goal_con,setup.points,setup.plot2d_lines,merged_mean)
+'''
+#code for testing input parser
+'''
+file="../../yun_old/yun_old.csv"
+data=data_input(file)
+samples=data.get_samples()
+print(data.get_phase_field())
+print(data.get_formulas())
+'''
+#code for yun2
+'''
+# Li Ca Zr Br
+for cube_size in [50,200,400,600,800,1000]:
+    f1='Li 1 Ca 0 Zr 0 Br 1'
+    f2='Li 0 Ca 1 Zr 0 Br 2'
+
+    sampled_point=[2,1,2,12]
+    weights=[21.42,78.58]
+    formulas=[f1,f2]
+
+    setup=all_information()
+    phase_field=['Li','Ca','Zr','Br']
+    normal_a = [1,2,4,-1]
+    normal_b = [1,1,1,1]
+    normal_a=np.array(normal_a)/np.linalg.norm(normal_a)
+    normal_b=np.array(normal_b)/np.linalg.norm(normal_b)
+    normal_vectors=np.stack((normal_a,normal_b),axis=0)
+    contained_point=[1,1,1,7]
+    contained_point=cube_size*np.array(contained_point)/sum(contained_point)
+    sigma=0.3
+    setup.setup(normal_vectors,contained_point,cube_size,sigma,create_heatmap=True)
+
+    sampled_point=cube_size*np.array(sampled_point)/np.sum(sampled_point)
+    wt_convert=wt_converter()
+    error_propagate=error_propagator(4,cube_size,contained_point)
+    moles,moles_error,formulas_standard=wt_convert.wt_to_moles(
+        formulas,weights)
+    error_propagate.set_moles_error(moles,formulas_standard,moles_error)
+    merged_mean,merged_sigma=error_propagate.get_merged_balls_p(setup.basis)
+    #print(merged_sigma)
+    #small_means,small_sigmas=error_propagate.get_small_balls_p(setup.basis)
+
+    sigma=setup.add_first_sample(sampled_point,merged_mean,merged_sigma)
+    points=setup.convert_points_to_new_projection('berny',setup.points)
+    end_points=setup.get_end_points('berny')
+    mean=setup.convert_points_to_new_projection('berny',merged_mean)
+    #small_means=setup.convert_points_to_new_projection('berny',small_means)
+
+    plotter=Plotter('Berny')
+    plotter.set_scatter_kwargs()
+    plotter.set_heat_cbar_kwargs()
+    plotter.set_directory('../../yun/')
+    plotter.top='CaBr$_2$'
+    plotter.left='ZrBr$_4$'
+    plotter.right='LiBr'
+
+    #plotter.mean_line_small(points,end_points,mean,small_means)
+
+    #p=setup.make_merged_ball_values(merged_mean,merged_sigma)
+    #data=setup.convert_f_to_new_projection('berny',p,setup.omega)
+    #plotter.merged_ball(data,mean)
+
+    setup.calculate_p_from_samples(1,100)
+    data=setup.convert_f_to_new_projection('berny',setup.values,setup.omega)
+    plotter.p_mean_initial(data,mean,points,show=True)
+
+    #plotter=visualise_square()
+    #setup.create_plot_lines()
+    #setup.make_heatmap_constrained()
+    #plotter.test_heatb(setup.heatmap,setup.xlim,setup.ylim)
+    '''
+#code for analysing error in old yun dataset
+
+file="../../yun_old/yun_old.csv"
+data=data_input(file)
+samples=data.get_samples(normalise_weights=False)
+
+purities=[]
+for i in samples:
+    purities.append(100-sum(i[1]))
+#samples=data.get_samples(normalise_weights=True)
 
 
+formulas=data.get_formulas()
+#print(data.get_phase_field())
+for i in samples:
+    s=13*i[0]/sum(i[0])
+    #print(s)
 
+na=[1,3,-2,-1]
+nb=[1,1,1,1]
+cp=[1,2,1,1]
+cube_size=100
+
+setup=all_information()
+setup.grid(na,nb,cp,cube_size)
+setup.add_samples_from_file(samples,formulas)
+
+goal=[6,3,3,1]
+setup.goal=setup.convert_point_to_constrained(goal)
+
+predicted_errors=setup.get_samples_expected_sigma()
+distances=[]
+actual_errors=setup.get_samples_projected_orthogonal_distance(distances)
+#print('----------')
+#for i,j in zip(predicted_errors,actual_errors):
+    #print(i,",",j)
+graph_error=np.arctan(actual_errors)
+for i in range(len(graph_error)):
+    if graph_error[i] < 0:
+        graph_error[i]+=2*np.pi
+    graph_error[i]=180*graph_error[i]/np.pi
+    #print(graph_error[i])
+
+graph_p_error=np.arctan(predicted_errors)
+for i in range(len(graph_p_error)):
+    if graph_p_error[i] < 0:
+        graph_p_error[i]+=2*np.pi
+    graph_p_error[i]=180*graph_p_error[i]/np.pi
+    #print(graph_p_error[i])
+
+
+fig,ax=plt.subplots(1)
+ax.scatter(purities,graph_error,marker='x',color='blue',label='Experimental error')
+
+ax.scatter(
+    purities,graph_p_error,color='red',label='Predicted error (68% conf.)')
+ax.set_xlabel('Purity')
+ax.set_ylabel('Angular error')
+ax.legend()
+plt.show()

@@ -18,6 +18,7 @@ from wtconversion import *
 from tetplotter import *
 from scipy import interpolate
 from scipy.spatial import ConvexHull, convex_hull_plot_2d
+from wtconversion import *
 
 
 SQRT3OVER2 = np.sqrt(3) / 2.
@@ -103,6 +104,14 @@ class all_information:
     def setup(self,normal_vectors,contained_point,cube_size,sigma,
               create_heatmap=False):
         self.sigma=sigma
+        self.create_omega_constrained(normal_vectors,cube_size,contained_point,
+                                     create_heatmap=create_heatmap)
+
+    def grid(self,na,nb,cp,cube_size=100,create_heatmap=False):
+        normala=np.array(na)
+        normalb=np.array(nb)
+        normal_vectors=np.stack((normala,normalb),axis=0)
+        contained_point=cube_size*np.array(cp)/sum(cp)
         self.create_omega_constrained(normal_vectors,cube_size,contained_point,
                                      create_heatmap=create_heatmap)
 
@@ -1831,7 +1840,8 @@ class all_information:
         stdses=np.empty((basises.shape[0],basises.shape[1]-1))
         for n,basis in enumerate(basises):
             for m,i in enumerate(basis[1:]):
-                stdses[n][m]=np.einsum('i,ij,j',i,self.sigmas[n],i)
+                stdses[n][m]=np.sqrt(np.einsum('i,ij,j',i,self.sigmas[n],i))
+                print(':',stdses)
         return stdses
 
 
@@ -1876,7 +1886,7 @@ class all_information:
         #direction9
         omega_broad=np.swapaxes(np.broadcast_to(omega,(n,o,dim)),0,1)
         samples_broad=np.broadcast_to(samples,(o,n,dim))
-        ax=omega_broad-samples_broad
+        ax=(omega_broad-samples_broad)/self.cube_size
         orth_direction_broad=np.broadcast_to(basises[:,0,:],(o,n,dim))
         ax_perp=np.sum(ax*orth_direction_broad,axis=2)
         selected_indexes=np.all(ax_perp >0,axis=1)
@@ -2052,8 +2062,8 @@ class all_information:
                 end_points_t[n]=point+mindist*line
             end_points_s=end_points_t-self.contained_point
             A=self.basis
-            end_points_s=np.einsum('ij,...j->...i',A,end_points_s)
-            return end_points_s
+            end_points=np.einsum('ij,...j->...i',A,end_points_s)
+            return end_points
 
                 
 
@@ -2530,7 +2540,7 @@ class all_information:
         point_s=point_s-self.contained_point
         point=np.einsum('ij,j',self.basis,point_s)
         distance=np.linalg.norm(point-mean)
-        sigma=np.diag(osigma/distance)
+        sigma=osigma/distance
         self.points=np.broadcast_to(point,(1,self.constrained_dim))
         self.lines=np.broadcast_to(point-mean,(1,self.constrained_dim))
         self.sigmas=np.broadcast_to(
@@ -2548,7 +2558,8 @@ class all_information:
         basises=np.empty((
             self.lines.shape[0],self.lines.shape[1],self.lines.shape[1]))
         for i in range(len(self.lines)):
-            basises[i]=self.get_basis(self.lines[i])
+            basises[i]=self.get_basis(self.lines[i]/
+                                      np.linalg.norm(self.lines[i]))
         stdses=self.get_stdses(basises)
         stdses*=scale
         self.create_p(self.omega,basises,self.points,stdses,delta=delta)
@@ -3286,6 +3297,73 @@ class all_information:
             results=np.array([result])
         return results
 
+    def add_samples_from_file(self,samples,formulas):
+        #function to add samples from file (currenlty only adds points and does
+        #not append them to an lists)
+        self.samples=[]
+        for i in samples:
+            pos_s=i[0]
+            weights=i[1]
+            #print(np.dot(self.normal_vectors[0],pos_s))
+            #print(self.normal_vectors[0])
+
+            if np.dot(self.normal_vectors[0],pos_s)!=0:
+                print('Error, following sampe is not charge neutral:',pos_s)
+
+            pos=self.convert_point_to_constrained(pos_s)
+            merged_mean,merged_sigma=self.get_known_ball(weights,formulas)
+            self.samples.append((pos,merged_mean,merged_sigma))
+
+    def get_known_ball(self,weights,formulas):
+        #function to return mean and covariance matrix of average composition
+        #of known crystals
+
+        #convert weight percentage to moles
+        weight_converter=wt_converter()
+        moles,moles_error,formulas_standard=weight_converter.wt_to_moles(
+            formulas,weights)
+        #get ball
+        error_propogate=error_propagator(4,self.cube_size,self.contained_point)
+        error_propogate.set_moles_error(moles,formulas_standard,moles_error)
+        ball=error_propogate.get_merged_balls_p(self.basis)
+        return ball
+
+    def get_samples_projected_orthogonal_distance(self,distances=[]):
+        #function to get the orthogonal distance between a samples estimated
+        #direction and the goal vector divided by the parrallel distance for
+        #every sample in self.samples
+        errors=[]
+        for s in self.samples:
+            pos=s[0]
+            mean=s[1]
+            est=pos-mean
+            est=est/np.linalg.norm(est)
+            g=self.goal-pos
+            gdist=np.linalg.norm(g)
+            distances.append(gdist)
+            g=g/np.linalg.norm(g)
+            #print(np.dot(g,est),",",gdist)
+            d=np.tan(np.arccos(np.dot(g,est)))
+            errors.append(d)
+        return errors
+
+    def get_samples_expected_sigma(self):
+        errors=[]
+        for s in self.samples:
+            pos=s[0]
+            mean=s[1]
+            sigma=s[2]
+            est=pos-mean
+            sigma=sigma/np.linalg.norm(est)
+            est=est/np.linalg.norm(est)
+            basis=self.get_basis(est) 
+            sigmas=[]
+            for u in basis[1:]:
+                sigmas.append(np.sqrt(np.einsum('i,ij,j',u,sigma,u)))
+            sigmas=np.array(sigmas)
+            sigma=np.sqrt(np.dot(sigmas,sigmas))
+            errors.append(sigma)
+        return errors
 
 
 
@@ -3317,5 +3395,4 @@ def block2(a,b,omega,m,count):
         values = np.prod(theta_p,axis=0)
               #block
 '''
-
 
