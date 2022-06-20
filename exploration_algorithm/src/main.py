@@ -1915,8 +1915,7 @@ for cube_size in [50,200,400,600,800,1000]:
     '''
 #code for analysing error in old yun dataset
 '''
-)
-        print(ya_p_parallel_reduced[ifile="../../yun_old/yun_old.csv"
+file="../../yun_old/yun_old.csv"
 data=data_input(file)
 samples=data.get_samples(normalise_weights=False)
 
@@ -1977,58 +1976,16 @@ plt.show()
 '''
 #code for testing new p method
 '''
-test=all_information()
-overseer=Results()
-num_trials=1
-output_file='../data/on_sphere_eval/n_batches_purity_6.csv'
-
-test_args={
-    'Multiple batches':True,
-    'Closest distances':True,
-    'Chebyshev distances':True,
-    'Expected purities':True,
-}
-test_type=test.test_k
-setup_args={
-    'Normal a':[2,2,-2,-2],
-    'Normal b':[1,1,1,1],
-    'Cube size':100,
-    'Delta param':80,
-    'Scale':1,
-    'Contained point':[1,1,1,1],
-    'Sigma':0.3,
-    'Rietveld closest':True,
-    'Number of batches':20,
-    'Slope':2.29,
-    'Intercept':-65,
-    #'Radius':5,
-    'Centre':'mean',
-    'Batch size':5,
-    'Min angle':110,
-    'Max':True,
-    'Max size':1000, 
-}
-setup_args.update(test_args)
-setup_type=test.setup_n_batches_recording
-
-
-result_descriptors=['Batch number','Closest distances','Chebyshev distances',
-                    'Expected purities']
-overseer.setup_test(
-    setup_type,setup_args,test_type,test_args,result_descriptors,
-    output_file=output_file,num_trials=num_trials)
-    '''
 setup=all_information()
-normal_a = np.array([1,1,-1,-1])
-normal_b = np.array([1,1,1,1])
+normal_a = np.array([1,2,4,-1,-1])
+normal_b = np.array([1,1,1,1,1])
 normal_vectors=np.stack((normal_a,normal_b)) 
-cube_size=400
-contained_point=np.array([1,1,1,1])*cube_size/4
-sigma=np.diag([0.05,0.05])
+cube_size=50
+contained_point=np.array([1,1,1,6,1])*cube_size/10
+sigma=np.diag([0.01,0.01,0.01])
 setup.setup(normal_vectors,contained_point,cube_size,sigma)
-setup.random_initialise(2)
-setup.make_p_gaussian_test(sigma,1,1)
-
+setup.random_initialise_test(5,sigma)
+setup.make_p_gaussian_test(sigma,1)
 plotter=Plotter('Berny')
 plotter.set_scatter_kwargs()
 plotter.set_heat_cbar_kwargs()
@@ -2043,8 +2000,102 @@ plotter.right='LiBr'
 #data=setup.convert_f_to_new_projection('berny',p,setup.omega)
 #plotter.merged_ball(data,mean)
 
-points=setup.convert_points_to_new_projection('berny',setup.points)
-end_points=setup.get_end_points('berny')
+#points=setup.convert_points_to_new_projection('berny',setup.points)
+#end_points=setup.get_end_points('berny')
 
-data=setup.convert_f_to_new_projection('berny',setup.values,setup.omega)
-plotter.p_line(data,points,end_points)
+#data=setup.convert_f_to_new_projection('berny',setup.values,setup.omega)
+#plotter.p_line(data,points,end_points)
+#goal=setup.convert_points_to_new_projection('berny',setup.goal)
+#plotter.p_goal(data,goal)
+'''
+#code for testing over estimate error
+'''
+file="../../yun_old/yun_old.csv"
+data=data_input(file)
+samples=data.get_samples(normalise_weights=False)
+
+purities=[]
+for i in samples:
+    purities.append(100-sum(i[1]))
+#samples=data.get_samples(normalise_weights=True)
+
+
+formulas=data.get_formulas()
+#print(data.get_phase_field())
+for i in samples:
+    s=13*i[0]/sum(i[0])
+    #print(s)
+
+na=[1,3,-2,-1]
+nb=[1,1,1,1]
+cp=[1,2,1,1]
+cube_size=100
+
+setup=all_information()
+setup.grid(na,nb,cp,cube_size)
+setup.add_samples_from_file(samples,formulas)
+
+goal=[6,3,3,1]
+setup.goal=setup.convert_point_to_constrained(goal)
+
+predicted_errors=setup.get_samples_expected_sigma()
+distances=[]
+actual_errors=setup.get_samples_projected_orthogonal_distance(distances)
+#print('----------')
+#for i,j in zip(predicted_errors,actual_errors):
+    #print(i,",",j)
+graph_error=np.arctan(actual_errors)
+for i in range(len(graph_error)):
+    if graph_error[i] < 0:
+        graph_error[i]+=2*np.pi
+    graph_error[i]=180*graph_error[i]/np.pi
+    #print(graph_error[i])
+'''
+
+test=all_information()
+overseer=Results()
+num_trials=100
+output_file='../data/error_sensitivity/e.csv'
+
+test_args={
+    'Multiple batches':True,
+    #'Closest distances':False,
+    #'Chebyshev distances':False,
+    #'Expected purities':False,
+    'Mean distance':True,
+}
+test_type=test.test_k
+setup_args={
+    'Normal a':[2,2,-2,-2],
+    'Normal b':[1,1,1,1],
+    'Cube size':50,
+    'Scale':0.01,
+    'Contained point':[1,1,1,1],
+    'Sigma':0.3,
+    'Rietveld closest':True,
+    'Number of batches':5,
+    'Slope':2.29,
+    'Intercept':-65,
+    #'Radius':5,
+    'Centre':'mean',
+    'Batch size':5,
+    'Min angle':90,
+    'Max':True,
+    #'Max size':1000, 
+}
+setup_args.update(test_args)
+setup_type=test.setup_n_batches_recording
+
+
+result_descriptors=['Batch number','Mean distance']
+overseer.setup_test(
+    setup_type,setup_args,test_type,test_args,result_descriptors,
+    output_file=output_file,num_trials=num_trials)
+test=all_information()
+normal_a = np.array([1,1,-1,-1])
+normal_b = np.array([1,1,1,1])
+normal_vectors=np.stack((normal_a,normal_b)) 
+cube_size=100
+contained_point=np.array([1,1,1,1])*cube_size/5
+sigma=np.diag([0.186,0.186])
+test.setup(normal_vectors,contained_point,cube_size,sigma)

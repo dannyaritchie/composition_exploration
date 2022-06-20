@@ -164,10 +164,21 @@ class Plotter:
     def p_line(self,data,points,end_points,show=True):
         fig,tax=ternary.figure(scale=100)
         self.tax_setup(tax,'heat')
-        tax.line(points[0],end_points[0],linewidth=0.5,color='Blue')
+        for i in range(len(points)):
+            tax.line(points[i],end_points[i],linewidth=0.5,color='Blue')
         tax.heatmap(data=data,scale=100,cmap='Reds',cb_kwargs=self.cb_kwargs)
         self.set_aspect(fig,tax,kind='heat')
-        plt.savefig(self.directory + "p mean initial.png")
+        #plt.savefig(self.directory + "p mean initial.png")
+        if show:
+            plt.show()
+
+    def p_goal(self,data,goal,show=True):
+        fig,tax=ternary.figure(scale=100)
+        self.tax_setup(tax,'heat')
+        tax.scatter([goal],color='blue',**self.scatter_ka)
+        tax.heatmap(data=data,scale=100,cmap='Reds',cb_kwargs=self.cb_kwargs)
+        self.set_aspect(fig,tax,kind='heat')
+        #plt.savefig(self.directory + "p mean initial.png")
         if show:
             plt.show()
 

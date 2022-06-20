@@ -1120,7 +1120,7 @@ class all_information:
         if omega is None:
             omega=self.omega
         if f is None:
-            f=self.values[:,0]
+            f=self.values
         u=np.swapaxes(np.broadcast_to(f,(omega.shape[1],len(f))),0,1)*omega
         mean=np.sum(u,axis=0)
         return mean
@@ -1239,34 +1239,30 @@ class all_information:
         self.lines = np.append(self.lines,np.array([estimated_line]),axis=0)
         self.end_points = np.append(self.end_points,np.array([self.points[point_index]+estimated_line]),axis=0)
 
-    def create_line_from_sample_constrained(self,dim,point_index,
-                                        method='default',sigma=None,length=1):
-        #function to generate a normalised random line for the sample specified by point
-        #index. line points towards goal with wobble specified by sigma
-        #appends line to self.lines and point+line to self.end_points
+    def create_line_from_sample_constrained(self,point_index,sigma):
+        dim=len(self.goal)
         true_line = self.goal - self.points[point_index]
         true_line_norm = true_line/np.linalg.norm(true_line)
-        x=np.empty((dim-1,dim))
         A = np.transpose(np.array([true_line_norm]))
         for i in range(dim-1):
-            x[i] = self.find_orthonormal(A)
-            A = np.hstack((A,np.array([x[i]]).T))
-        if method == 'default':
-            sigma=self.simulate_sample(method=method)
-        stds = np.empty((len(x)))
-        for i in range(len(x)):
-            stds[i] = np.einsum('k,kl,l',x[i],sigma,x[i])
-        perp_vec=np.zeros((dim))
-        for i in range(len(x)):
-            c = np.random.normal(loc=0,scale=stds[i])
-            perp_vec=perp_vec+c*x[i]
-        estimated_line=perp_vec+true_line_norm
-        estimated_line_norm=estimated_line/np.linalg.norm(estimated_line)
-        self.lines = np.append(self.lines,np.array([estimated_line]),axis=0)
-        self.end_points=np.append(self.end_points,np.array([self.points[point_index]+length*estimated_line]),axis=0)
+            x = self.find_orthonormal(A)
+            A = np.hstack((A,np.array([x]).T))
+        A=A[:,1:]
+        sigma_perp=np.empty((dim-1,dim-1))
+        sigma_perp=np.einsum('ij,jk,kl',A.T,sigma,A)
+        mean=np.zeros((dim-1))
+        v=np.random.multivariate_normal(
+            mean=mean,cov=sigma_perp)
+        dv=np.einsum('ij,j',A,v)
+        ed=true_line_norm+dv
+        ed=ed/np.linalg.norm(ed)
+        self.lines[point_index]=ed
+        self.end_points[point_index]=self.points[point_index]+ed
+
 
     def create_plot_lines(self):
         self.plot2d_lines=np.empty((len(self.lines),2,2))
+        self.end_points=self.get_end_points('constrained')
         self.end_points=self.get_end_points('constrained')
         if len(self.end_points)==len(self.points):
             for i in range(len(self.lines)):
@@ -1821,61 +1817,25 @@ class all_information:
         #print(goal.shape)
         plotter.test_fig(self.goal,self.points,self.plot2d_lines,self.heatmap,self.xlim,self.ylim,self.omega,mean)
 
-    def make_p_gaussian(self,sigma,scale,delta,save_reduced=False):
+    def make_p_gaussian(self,sigma,scale,save_reduced=False):
         self.sigma=sigma
         self.scale=scale
-        self.delta=delta
         basises=np.empty((self.lines.shape[0],self.lines.shape[1],self.lines.shape[1]))
         for i in range(len(self.lines)):
             basises[i]=self.get_basis(self.lines[i])
-        self.set_sigma_simulated(sigma,scale)
-        stdses=self.get_stdses(basises)
-        self.create_p(
-            self.omega,basises,self.points,stdses,delta=delta,
-            save_reduced=save_reduced)
-        
-    def make_p_gaussian_test(self,sigma,scale,delta,save_reduced=False):
-        self.sigma=sigma
-        self.scale=scale
-        self.delta=delta
-        basises=np.empty((self.lines.shape[0],self.lines.shape[1],self.lines.shape[1]))
-        for i in range(len(self.lines)):
-            basises[i]=self.get_basis_test(self.lines[i])
-        self.set_sigma_simulated(sigma,scale)
+        self.set_sigma_predicted(sigma,scale)
         sigmas_perp=self.get_sigma_perp(basises)
-        self.create_p_test(
-            self.omega,basises,self.points,sigmas_perp,delta=delta,
+        self.create_p(
+            self.omega,basises,self.points,sigmas_perp,
             save_reduced=save_reduced)
         
-    def get_stdses(self,basises):
-        #function to compute the standard deviation in each of the directions
-        #in self.basis (but not the the first one) and store as a n,dim-3
-        stdses=np.empty((basises.shape[0],basises.shape[1]-1))
-        print('YAYA')
-        print(self.sigmas[0])
-        for n,basis in enumerate(basises):
-            for m,i in enumerate(basis[1:]):
-                stdses[n][m]=np.sqrt(np.einsum('i,ij,j',i,self.sigmas[n],i))
-            print(stdses[n])
-        return stdses
-
-    def get_sigma_perp(self,basises):
-        #function to compute the standard deviation in each of the directions
         #in self.basis (but not the the first one) and store as a n,dim-3
         sigmas_perp=np.empty((
             basises.shape[0],basises.shape[1]-1,basises.shape[1]-1))
-        print('YAY')
-        print(self.sigmas[0])
         for n,basis in enumerate(basises):
-            print(basis,'llll')
             A=basis[:,1:]
-            print(A)
             sigmas_perp[n]=np.einsum('ij,jk,kl',A.T,self.sigmas[n],A)
-            print(sigmas_perp)
-            print(np.sqrt(0.3))
-            print(sigmas_perp.shape)
         return sigmas_perp
-
 
     def get_basis(self, estimated_direction):
         dim = len(estimated_direction)
@@ -1889,101 +1849,25 @@ class all_information:
         for i in range(dim-1):
             x[i] = self.find_orthonormal(A)
             A = np.hstack((A,np.array([x[i]]).T))
-        return A.T
-
-    def get_basis_test(self, estimated_direction):
-        dim = len(estimated_direction)
-        #function to caluclate basis for each sample
-        #basis: numpy (dim,dim) array such such that
-        # basis matmul (a point) gives the point in
-        # representation where first element is size in estimated_direction and
-        # subsequent elements are sizes in orthogonal directions
-        x=np.empty((dim-1,dim))
-        A = np.transpose(np.array([estimated_direction]))
-        for i in range(dim-1):
-            x[i] = self.find_orthonormal(A)
-            A = np.hstack((A,np.array([x[i]]).T))
-        print('ttt')
-        print(estimated_direction)
-        print(A)
         return A
 
-    def set_sigma_simulated(self,sigma,scale=1):
-        self.sigmas=np.zeros((len(self.points),self.points.shape[1],self.points.shape[1]))+sigma/scale
+    def get_sigma_perp(self,basises):
+        #function to compute the standard deviation in each of the directions
+        #in self.basis (but not the the first one) and store as a n,dim-3
+        sigmas_perp=np.empty((
+            basises.shape[0],basises.shape[1]-1,basises.shape[1]-1))
+        for n,basis in enumerate(basises):
+            A=basis[:,1:]
+            sigmas_perp[n]=np.einsum('ij,jk,kl',A.T,self.sigmas[n],A)
+        return sigmas_perp
 
-    def create_p(self,omega,basises,samples,stdses,
-                 delta=1,save_reduced=False,addition=False):
-        #function to calculate P for every point in omega
-        #omega: numpy (o,dim) array for every point
-        #basises: numpy (n,dim,dim) array for n samples such that
-        # the matrix (i,dim,dim) matmul (a point) gives the point in
-        # representation where first element is size in perp direction and
-        # subsequent elements are sizes in orthogonal directions
-        #samples: numpy (n,dim) array giving location of each sample
-        #stdss: numpy (n,dim-1) array giving std of each sample in its
-        # orthogonal directions
-        #Indexes:
-            #o-omega
-            #n-sample
-            #dim dimensions
-        o = len(omega)
-        n = len(samples)
-        m = stdses.shape[1]
-        dim=self.points.shape[1]
+    def set_sigma_predicted(self,sigma,scale=1):
+        self.sigmas=(np.zeros(
+            (len(self.points),self.points.shape[1],self.points.shape[1]))
+            +sigma*scale)
 
-        #reduce omega to only consider points which are in forward orthogonal
-        #direction9
-        omega_broad=np.swapaxes(np.broadcast_to(omega,(n,o,dim)),0,1)
-        samples_broad=np.broadcast_to(samples,(o,n,dim))
-        ax=(omega_broad-samples_broad)/self.cube_size
-        orth_direction_broad=np.broadcast_to(basises[:,0,:],(o,n,dim))
-        ax_perp=np.sum(ax*orth_direction_broad,axis=2)
-        selected_indexes=np.all(ax_perp >0,axis=1)
-        ax_perp_reduced=ax_perp[selected_indexes]
-        ax_reduced=ax[selected_indexes]
-        o=len(ax_reduced)
-
-        #project points
-        ax_perp_broad=np.moveaxis(np.broadcast_to(ax_perp_reduced,(dim,o,n)),0,2)
-        #ax_proj=np.zeros((o,n,dim))
-        #np.divide(ax_reduced,ax_perp_broad,where=ax_perp_broad!=0,out=ax_proj)
-        parallel_directions=basises[:,1:,:]
-        ax_parallel=np.einsum('...id,ikd->...ik',ax_reduced,parallel_directions)
-
-        #scale sigmas
-        scaled_std=np.einsum('...i,k...->k...i',stdses,ax_perp_reduced)
-
-        #lower = ax_parallel-delta
-        #CDF_lower=scipy.stats.norm(loc=0,scale=scaled_std).cdf(lower)
-        #upper = ax_parallel+delta
-        #CDF_upper=scipy.stats.norm(loc=0,scale=scaled_std).cdf(upper)
-        #p_reduced=CDF_upper-CDF_lower
-        p_reduced=scipy.stats.norm.pdf(ax_parallel,loc=0,scale=scaled_std)
-        for i in p_reduced[:,0,0]:
-            if i <0:
-                print(i)
-        #normalisation?
-        normalisation=np.sum(p_reduced,axis=0)
-        p_reduced=p_reduced/np.broadcast_to(normalisation,p_reduced.shape)
-        p_reduced=np.prod(p_reduced,axis=2)
-        p_reduced=np.prod(p_reduced,axis=1)
-        p=np.zeros((len(omega)))
-        p[selected_indexes]=p_reduced
-        if not addition:
-            if save_reduced:
-                self.omega=self.omega[selected_indexes]
-                self.values=p_reduced
-            else:
-                self.values=p
-        else:
-            if save_reduced:
-                self.omega=self.omega[selected_indexes]
-                self.values=self.values[selected_indexes]*p_reduced
-            else:
-                self.values=self.values*p
-
-    def create_p_test(self,omega,basises,samples,sigmas_perp,
-                 delta=1,save_reduced=False,addition=False):
+    def create_p(self,omega,basises,samples,sigmas_perp,
+                      save_reduced=False,addition=False):
         #function to calculate P for every point in omega
         #omega: numpy (o,dim) array for every point
         #basises: numpy (n,dim,dim) array for n samples such that
@@ -1994,8 +1878,8 @@ class all_information:
         #stdss: numpy (n,dim-1,dim-1) array giving sigma for each sample in its
         # orthogonal directions
         #Indexes:
-            #o-omega
-            #n-sample
+            #o-omega size
+            #n-sample size
             #dim dimensions
         o = len(omega)
         n = len(samples)
@@ -2004,59 +1888,52 @@ class all_information:
 
         #reduce omega to only consider points which are in forward orthogonal
         #direction9
+
+        #get ya (vector from sample to point), normalised to not be dependant
+        #on cube size
         y_broad=np.swapaxes(np.broadcast_to(omega,(n,o,dim)),0,1)
         a_broad=np.broadcast_to(samples,(o,n,dim))
         ya=(y_broad-a_broad)/self.cube_size
+
+        #get ya in parallel/perpindicu;ar basis
         basises_broad=np.broadcast_to(basises,(o,n,dim,dim))
-        print('Here')
-        print(basises.shape)
-        print(basises_broad.shape)
-        print(ya.shape)
         ya_p=np.einsum('...ji,...j->...i',basises_broad,ya)
+
+        #split into parallel and perpindicular parts
         ya_p_parallel=ya_p[:,:,0]
         ya_p_perp=ya_p[:,:,1:]
-        selected_indexes=np.all(ya_p_parallel>0,axis=1)
 
+        #remove points that are more than 180 out for any sample
+        selected_indexes=np.all(ya_p_parallel>0,axis=1)
         ya_p_perp_reduced=ya_p_perp[selected_indexes]
         ya_p_parallel_reduced=ya_p_parallel[selected_indexes]
 
-        print(ya_p_perp_reduced.shape,'gggggggg')
-        print(ya_p_parallel_reduced.shape)
-
-        #scale sigmas
-        print(sigmas_perp.shape)
-        print(ya_p_parallel_reduced.shape)
+        #scale sigmas by parallel length
         scaled_sigmas=np.einsum(
             'om,mij->omij',ya_p_parallel_reduced,sigmas_perp)
-        print('dddddd',scaled_sigmas.shape)
 
-        '''
-        #project points
-        ax_perp_broad=np.moveaxis(np.broadcast_to(ax_perp_reduced,(dim,o,n)),0,2)
-        #ax_proj=np.zeros((o,n,dim))
-        #np.divide(ax_reduced,ax_perp_broad,where=ax_perp_broad!=0,out=ax_proj)
-        parallel_directions=basises[:,1:,:]
-        ax_parallel=np.einsum('...id,ikd->...ik',ax_reduced,parallel_directions)
-
-
-        #lower = ax_parallel-delta
-        #CDF_lower=scipy.stats.norm(loc=0,scale=scaled_std).cdf(lower)
-        #upper = ax_parallel+delta
-        #CDF_upper=scipy.stats.norm(loc=0,scale=scaled_std).cdf(upper)
-        #p_reduced=CDF_upper-CDF_lower
-        '''
+        #create empty vector to store probabilites for each point -> for each
+        #sample
         p_reduced=np.empty(ya_p_perp_reduced.shape[:-1])
+        #for each point
         for n,(ys,covs) in enumerate(zip(ya_p_perp_reduced,scaled_sigmas)):
+            #for each sample
             for m,(y,cov) in enumerate(zip(ys,covs)):
+                #calc prob
                 p_reduced[n][m]=scipy.stats.multivariate_normal.pdf(
-                    y,mean=np.zeros(p_reduced.shape[-1]),cov=cov)
-        print(p_reduced.shape,'gggggggg')
+                    y,mean=np.zeros(ya_p_perp_reduced.shape[-1]),cov=cov)
+
         #normalisation?
         #normalisation=np.sum(p_reduced,axis=0)
         #p_reduced=p_reduced/np.broadcast_to(normalisation,p_reduced.shape)
+
+        #take product of probabilities over samples
         p_reduced=np.prod(p_reduced,axis=1)
+
+        #set probabilities for vector for all points
         p=np.zeros((len(omega)))
         p[selected_indexes]=p_reduced
+
         if not addition:
             if save_reduced:
                 self.omega=self.omega[selected_indexes]
@@ -2107,14 +1984,14 @@ class all_information:
         point_labels={'Initial':[0,1]}
         plotter.berny_testing(data,points,end_points,point_labels)
 
-    def random_initialise(self,n,maxdist=None):
+    def random_initialise(self,n,sigma,maxdist=None):
         dim_constrained=(self.normal_vectors.shape[1]
                          -self.normal_vectors.shape[0])
         points=self.random_point_constrained(n=n+1)
         self.goal=points[0]
         self.points=points[1:]
-        self.lines=np.empty((0,dim_constrained))
-        self.end_points=np.empty((0,dim_constrained))
+        self.lines=np.empty((n,dim_constrained))
+        self.end_points=np.empty((n,dim_constrained))
         
         if maxdist:
             dist = np.linalg.norm(self.goal-self.points[0])/self.cube_size
@@ -2123,8 +2000,8 @@ class all_information:
                 dist = np.linalg.norm(self.goal-self.points[0])/self.cube_size
 
         for i in range(n):
-            self.create_line_from_sample_constrained(
-                dim_constrained,i,method='use_sigma',sigma=self.sigma)
+            self.create_line_from_sample_constrained(i,sigma)
+    
 
     def convert_to_ternary_basis(self,x):
         x_t=np.empty((len(x),2))
@@ -2745,7 +2622,7 @@ class all_information:
 
 
     def sample_next_batch(
-            self,method,sigma,scale,delta,num_points=None,
+            self,method,sigma,scale,num_points=None,
             num_targets=None,angular_equivalence=None,num_chosen=None,
             exclusion=None,plot_process=False,rietveld_closest=False,
             n_points=None,batch_size=None,return_points=False):
@@ -2782,12 +2659,17 @@ class all_information:
         if not rietveld_closest:
             start=len(self.points)
             self.points=np.append(self.points,next_points,axis=0)
+            self.lines=np.append(
+                self.lines,np.zeros((next_points.shape)),axis=0)
+            self.end_points=np.append(
+                self.end_points,np.zeros((next_points.shape)),axis=0)
             stop=len(self.points)
             for i in range(start,stop):
-                self.create_line_from_sample_constrained(
-                    self.constrained_dim,i,method='use_sigma',sigma=sigma)
+                self.create_line_from_sample_constrained(i,sigma)
             point_indexes=range(start,stop)
-            self.update_values(point_indexes,sigma,scale,delta)
+            #unused optimisation to avoid computing known p_values
+            #self.update_values(point_indexes,sigma,scale,delta)
+            self.make_p_gaussian(sigma,scale)
         else:
             next_points_sorted=sorted(
                 next_points,key=lambda x:np.linalg.norm(x-self.goal))
@@ -2795,12 +2677,17 @@ class all_information:
                 rietveld_closest=1 # backwards compatability
             self.points=np.append(
                 self.points,next_points_sorted[:rietveld_closest],axis=0)
+            self.lines=np.append(
+                self.lines,
+                np.zeros((rietveld_closest,self.constrained_dim)),axis=0)
+            self.end_points=np.append(
+                self.end_points,
+                np.zeros((rietveld_closest,self.constrained_dim)),axis=0)
             for i in range(
                     len(self.points)-rietveld_closest,len(self.points)):
-                self.create_line_from_sample_constrained(
-                self.constrained_dim,i,method='use_sigma',sigma=sigma)
+                self.create_line_from_sample_constrained(i,sigma)
             #self.update_values([i],sigma,scale,delta)
-            self.make_p_gaussian(sigma,scale,delta)
+            self.make_p_gaussian(sigma,scale)
             self.chosen_point=next_points_sorted[0]
         if return_points:
             return next_points
@@ -2891,6 +2778,10 @@ class all_information:
         self.draw_estimated_known_composition(chosen_point,goal_percent*100)
         return (goal_percent*100)
 
+    def get_mean_distance(self):
+        mean=self.get_max(f=self.values)
+        goal=self.goal
+        return np.linalg.norm(mean-goal)
 
     def revert_to_initial(self):
         self.points=self.points[0:1]
@@ -2999,7 +2890,6 @@ class all_information:
         normal_a=np.array(k['Normal a'])
         normal_b=np.array(k['Normal b'])
         cube_size=k['Cube size']
-        delta_param=k['Delta param']
         scale=k['Scale']
         contained_point=np.array(k['Contained point'])
         sigma=k['Sigma']
@@ -3016,7 +2906,6 @@ class all_information:
         maxdist=k.get('Max start distance')
 
         con_dim=normal_a.shape[0]-2
-        delta=cube_size/delta_param
         normal_a=normal_a/np.linalg.norm(normal_a)
         normal_b=normal_b/np.linalg.norm(normal_b)
         normal_vectors=np.stack((normal_a,normal_b))
@@ -3029,21 +2918,17 @@ class all_information:
             self.chebyshev_distances=np.zeros(num_batches)
         if k.get('Expected purities'):
             self.expected_purities=np.full((num_batches),100)
+        if k.get('Mean distance'):
+            self.mean_distances=np.zeros(num_batches)
 
         self.max_size=max_size
 
         self.setup(normal_vectors,contained_point,
                    cube_size,sigma)
-        self.random_initialise(1,maxdist=maxdist)
-        self.make_p_gaussian(sigma,scale,delta)
-        a=self.values
-        #Test 
-        self.make_p_gaussian_test(sigma,scale,delta)
-        b=self.values
-        print(np.all(a==b),'Result')
-        #ET
+        self.random_initialise(1,sigma,maxdist=maxdist)
+        self.make_p_gaussian(sigma,scale)
         self.sample_next_batch(
-            'lastline',sigma,scale,delta,batch_size=batch_size,
+            'lastline',sigma,scale,batch_size=batch_size,
             rietveld_closest=rietveld_closest)
 
         if k.get('Closest distances'):
@@ -3054,6 +2939,9 @@ class all_information:
         if k.get('Expected purities'):
             self.expected_purities[0]=self.get_expected_purity(
                 self.points,cheat=True)
+        if k.get('Mean distance'):
+            self.mean_distances[0]=self.get_mean_distance()
+            print(0,self.get_mean_distance())
 
         if k.get('Max'):
             batch_size-=1
@@ -3062,7 +2950,7 @@ class all_information:
             if self.max_size:
                 self.reduce_omega_constrained()
                 self.refine_omega()
-                self.make_p_gaussian(sigma,scale,delta)
+                self.make_p_gaussian(sigma,scale)
             next_points=self.choose_next_best_points_sphere(
                 centre,batch_size,min_angle,slope=slope,intercept=intercept,
                 set_radius=radius)
@@ -3077,12 +2965,15 @@ class all_information:
             if k.get('Expected purities'):
                 self.expected_purities[i]=self.get_expected_purity(
                     next_points,cheat=True)
+            if k.get('Mean distance'):
+                self.mean_distances[i]=self.get_mean_distance()
+            print(i,self.get_mean_distance())
 
             for point in next_points:
                 if np.all(point==self.goal):
                     return
             self.sample_next_batch(
-                'provided',sigma,scale,delta,
+                'provided',sigma,scale,
                 rietveld_closest=rietveld_closest,n_points=next_points)
 
     def setup_one_batch_on_line_rietveld(self,k):
@@ -3407,6 +3298,9 @@ class all_information:
                 res.append(self.chebyshev_distances)
             if k.get('Expected purities'):
                 res.append(self.expected_purities)
+            if k.get('Mean distance'):
+                res.append(self.mean_distances)
+                print(self.mean_distances)
             if len(res)==0:
                 print('Error, no result descriptors')
             results=np.empty((len(res[0]),len(res)+1))
@@ -3414,6 +3308,7 @@ class all_information:
                 for j in range(len(res)):
                     results[i][0]=i
                     results[i][j+1]=res[j][i]
+            print(results)
         else:
             result=[]
             if k.get('Variance'):

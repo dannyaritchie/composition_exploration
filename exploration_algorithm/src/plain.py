@@ -14,11 +14,15 @@ import seaborn as sns
 
 overseer=Results()
 
-output_filea='../data/on_sphere_eval/radius_opt_5.csv'
-output_fileb='../data/on_sphere_eval/reduction.csv'
-output_file='../data/on_sphere_eval/rietveld.csv'
-'''
+output_file='../data/error_sensitivity/e.csv'
 df=pd.read_csv(output_file)
+sns.lineplot(data=df,x='Batch number',y='Mean distance',hue='Scale')
+plt.show()
+
+
+#output_fileb='../data/on_sphere_eval/reduction.csv'
+#output_file='../data/on_sphere_eval/rietveld.csv'
+'''
 dfa=pd.DataFrame()
 dfb=pd.DataFrame()
 dfc=pd.DataFrame()
@@ -45,8 +49,8 @@ plt.show()
 #overseer.plot_regression('Standard deviation','Mean distance',output_file)
 #overseer.plot_hists(output_filea,output_fileb,'Closest distance')
 #overseer.plot_line(output_file,'Radius','Closest distance')
-overseer.plot_lines(
-    output_file,'Batch number','Expected purities','Rietveld closest')
+#overseer.plot_lines(
+#    output_file,'Batch number','Expected purities','Rietveld closest')
 #code to alter file
 '''
 df=pd.read_csv(output_file)
