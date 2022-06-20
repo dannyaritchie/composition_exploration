@@ -1661,7 +1661,8 @@ print(x)
 print(A)
 print(B)
 test=[1,2,3]
-testb=[0,0,1,2,3]
+testb=[0,0,1,2,3])
+        print(ya_p_parallel_reduced[i
 print(np.einsum('ij,i',x,test))
 print(np.einsum('ij,i',B,testb))
 test=[3,2,2,3,2]
@@ -1793,7 +1794,8 @@ pawley_rank=[[[1,6,5,4,5]],
              [[2,1,1,0,3],[2,1,1,3,0],[2,1,0,2,3],
               [0,1,1,1,2],[2,0,1,1,2],[1,1,1,2,0],
               [2,3,5,1,1]]]
-setup.set_pawley_rank_s(pawley_rank=pawley_rank)
+)
+        print(ya_p_parallel_reduced[isetup.set_pawley_rank_s(pawley_rank=pawley_rank)
 #jon_points=[[3.11,7.33,8.72,7.66,0],[2.30,8.15,9.20,6.18,2.17],[7.71,8.62,9.05,8.43,7.04],[0.80,13.16,13.41,13.11,0.35],[2.35,6.83,8.67,3.86,1.64]]
 jon_points=[[2.21,8.22,2.28,13.28,9.03],[1.07,5.44,0,11.09,5.61],[3.13,4.98,2.84,7.23,5.16],[1.83,5.22,1.20,8.05,7.04],[0.60,7.24,0.98,13.51,6.84]]
 setup.plot_points_jon(pawley_rank=True,points=jon_points)
@@ -1863,7 +1865,8 @@ for cube_size in [50,200,400,600,800,1000]:
     phase_field=['Li','Ca','Zr','Br']
     normal_a = [1,2,4,-1]
     normal_b = [1,1,1,1]
-    normal_a=np.array(normal_a)/np.linalg.norm(normal_a)
+    normal_a=np.array(normal_a)/np.lin)
+        print(ya_p_parallel_reduced[ialg.norm(normal_a)
     normal_b=np.array(normal_b)/np.linalg.norm(normal_b)
     normal_vectors=np.stack((normal_a,normal_b),axis=0)
     contained_point=[1,1,1,7]
@@ -1911,8 +1914,9 @@ for cube_size in [50,200,400,600,800,1000]:
     #plotter.test_heatb(setup.heatmap,setup.xlim,setup.ylim)
     '''
 #code for analysing error in old yun dataset
-
-file="../../yun_old/yun_old.csv"
+'''
+)
+        print(ya_p_parallel_reduced[ifile="../../yun_old/yun_old.csv"
 data=data_input(file)
 samples=data.get_samples(normalise_weights=False)
 
@@ -1970,3 +1974,77 @@ ax.set_xlabel('Purity')
 ax.set_ylabel('Angular error')
 ax.legend()
 plt.show()
+'''
+#code for testing new p method
+'''
+test=all_information()
+overseer=Results()
+num_trials=1
+output_file='../data/on_sphere_eval/n_batches_purity_6.csv'
+
+test_args={
+    'Multiple batches':True,
+    'Closest distances':True,
+    'Chebyshev distances':True,
+    'Expected purities':True,
+}
+test_type=test.test_k
+setup_args={
+    'Normal a':[2,2,-2,-2],
+    'Normal b':[1,1,1,1],
+    'Cube size':100,
+    'Delta param':80,
+    'Scale':1,
+    'Contained point':[1,1,1,1],
+    'Sigma':0.3,
+    'Rietveld closest':True,
+    'Number of batches':20,
+    'Slope':2.29,
+    'Intercept':-65,
+    #'Radius':5,
+    'Centre':'mean',
+    'Batch size':5,
+    'Min angle':110,
+    'Max':True,
+    'Max size':1000, 
+}
+setup_args.update(test_args)
+setup_type=test.setup_n_batches_recording
+
+
+result_descriptors=['Batch number','Closest distances','Chebyshev distances',
+                    'Expected purities']
+overseer.setup_test(
+    setup_type,setup_args,test_type,test_args,result_descriptors,
+    output_file=output_file,num_trials=num_trials)
+    '''
+setup=all_information()
+normal_a = np.array([1,1,-1,-1])
+normal_b = np.array([1,1,1,1])
+normal_vectors=np.stack((normal_a,normal_b)) 
+cube_size=400
+contained_point=np.array([1,1,1,1])*cube_size/4
+sigma=np.diag([0.05,0.05])
+setup.setup(normal_vectors,contained_point,cube_size,sigma)
+setup.random_initialise(2)
+setup.make_p_gaussian_test(sigma,1,1)
+
+plotter=Plotter('Berny')
+plotter.set_scatter_kwargs()
+plotter.set_heat_cbar_kwargs()
+plotter.set_directory('../../yun/')
+plotter.top='CaBr$_2$'
+plotter.left='ZrBr$_4$'
+plotter.right='LiBr'
+
+#plotter.mean_line_small(points,end_points,mean,small_means)
+
+#p=setup.make_merged_ball_values(merged_mean,merged_sigma)
+#data=setup.convert_f_to_new_projection('berny',p,setup.omega)
+#plotter.merged_ball(data,mean)
+
+points=setup.convert_points_to_new_projection('berny',setup.points)
+end_points=setup.get_end_points('berny')
+
+data=setup.convert_f_to_new_projection('berny',setup.values,setup.omega)
+plotter.p_line(data,points,end_points)

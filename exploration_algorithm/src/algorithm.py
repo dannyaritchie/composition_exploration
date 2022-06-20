@@ -1834,15 +1834,47 @@ class all_information:
             self.omega,basises,self.points,stdses,delta=delta,
             save_reduced=save_reduced)
         
+    def make_p_gaussian_test(self,sigma,scale,delta,save_reduced=False):
+        self.sigma=sigma
+        self.scale=scale
+        self.delta=delta
+        basises=np.empty((self.lines.shape[0],self.lines.shape[1],self.lines.shape[1]))
+        for i in range(len(self.lines)):
+            basises[i]=self.get_basis_test(self.lines[i])
+        self.set_sigma_simulated(sigma,scale)
+        sigmas_perp=self.get_sigma_perp(basises)
+        self.create_p_test(
+            self.omega,basises,self.points,sigmas_perp,delta=delta,
+            save_reduced=save_reduced)
+        
     def get_stdses(self,basises):
         #function to compute the standard deviation in each of the directions
         #in self.basis (but not the the first one) and store as a n,dim-3
         stdses=np.empty((basises.shape[0],basises.shape[1]-1))
+        print('YAYA')
+        print(self.sigmas[0])
         for n,basis in enumerate(basises):
             for m,i in enumerate(basis[1:]):
                 stdses[n][m]=np.sqrt(np.einsum('i,ij,j',i,self.sigmas[n],i))
-                print(':',stdses)
+            print(stdses[n])
         return stdses
+
+    def get_sigma_perp(self,basises):
+        #function to compute the standard deviation in each of the directions
+        #in self.basis (but not the the first one) and store as a n,dim-3
+        sigmas_perp=np.empty((
+            basises.shape[0],basises.shape[1]-1,basises.shape[1]-1))
+        print('YAY')
+        print(self.sigmas[0])
+        for n,basis in enumerate(basises):
+            print(basis,'llll')
+            A=basis[:,1:]
+            print(A)
+            sigmas_perp[n]=np.einsum('ij,jk,kl',A.T,self.sigmas[n],A)
+            print(sigmas_perp)
+            print(np.sqrt(0.3))
+            print(sigmas_perp.shape)
+        return sigmas_perp
 
 
     def get_basis(self, estimated_direction):
@@ -1858,6 +1890,23 @@ class all_information:
             x[i] = self.find_orthonormal(A)
             A = np.hstack((A,np.array([x[i]]).T))
         return A.T
+
+    def get_basis_test(self, estimated_direction):
+        dim = len(estimated_direction)
+        #function to caluclate basis for each sample
+        #basis: numpy (dim,dim) array such such that
+        # basis matmul (a point) gives the point in
+        # representation where first element is size in estimated_direction and
+        # subsequent elements are sizes in orthogonal directions
+        x=np.empty((dim-1,dim))
+        A = np.transpose(np.array([estimated_direction]))
+        for i in range(dim-1):
+            x[i] = self.find_orthonormal(A)
+            A = np.hstack((A,np.array([x[i]]).T))
+        print('ttt')
+        print(estimated_direction)
+        print(A)
+        return A
 
     def set_sigma_simulated(self,sigma,scale=1):
         self.sigmas=np.zeros((len(self.points),self.points.shape[1],self.points.shape[1]))+sigma/scale
@@ -1933,6 +1982,93 @@ class all_information:
             else:
                 self.values=self.values*p
 
+    def create_p_test(self,omega,basises,samples,sigmas_perp,
+                 delta=1,save_reduced=False,addition=False):
+        #function to calculate P for every point in omega
+        #omega: numpy (o,dim) array for every point
+        #basises: numpy (n,dim,dim) array for n samples such that
+        # the matrix (i,dim,dim).T matmul (a point) gives the point in
+        # representation where first element is size in perp direction and
+        # subsequent elements are sizes in orthogonal directions
+        #samples: numpy (n,dim) array giving location of each sample
+        #stdss: numpy (n,dim-1,dim-1) array giving sigma for each sample in its
+        # orthogonal directions
+        #Indexes:
+            #o-omega
+            #n-sample
+            #dim dimensions
+        o = len(omega)
+        n = len(samples)
+        #m = sigmas_perp.shape[1]
+        dim=self.points.shape[1]
+
+        #reduce omega to only consider points which are in forward orthogonal
+        #direction9
+        y_broad=np.swapaxes(np.broadcast_to(omega,(n,o,dim)),0,1)
+        a_broad=np.broadcast_to(samples,(o,n,dim))
+        ya=(y_broad-a_broad)/self.cube_size
+        basises_broad=np.broadcast_to(basises,(o,n,dim,dim))
+        print('Here')
+        print(basises.shape)
+        print(basises_broad.shape)
+        print(ya.shape)
+        ya_p=np.einsum('...ji,...j->...i',basises_broad,ya)
+        ya_p_parallel=ya_p[:,:,0]
+        ya_p_perp=ya_p[:,:,1:]
+        selected_indexes=np.all(ya_p_parallel>0,axis=1)
+
+        ya_p_perp_reduced=ya_p_perp[selected_indexes]
+        ya_p_parallel_reduced=ya_p_parallel[selected_indexes]
+
+        print(ya_p_perp_reduced.shape,'gggggggg')
+        print(ya_p_parallel_reduced.shape)
+
+        #scale sigmas
+        print(sigmas_perp.shape)
+        print(ya_p_parallel_reduced.shape)
+        scaled_sigmas=np.einsum(
+            'om,mij->omij',ya_p_parallel_reduced,sigmas_perp)
+        print('dddddd',scaled_sigmas.shape)
+
+        '''
+        #project points
+        ax_perp_broad=np.moveaxis(np.broadcast_to(ax_perp_reduced,(dim,o,n)),0,2)
+        #ax_proj=np.zeros((o,n,dim))
+        #np.divide(ax_reduced,ax_perp_broad,where=ax_perp_broad!=0,out=ax_proj)
+        parallel_directions=basises[:,1:,:]
+        ax_parallel=np.einsum('...id,ikd->...ik',ax_reduced,parallel_directions)
+
+
+        #lower = ax_parallel-delta
+        #CDF_lower=scipy.stats.norm(loc=0,scale=scaled_std).cdf(lower)
+        #upper = ax_parallel+delta
+        #CDF_upper=scipy.stats.norm(loc=0,scale=scaled_std).cdf(upper)
+        #p_reduced=CDF_upper-CDF_lower
+        '''
+        p_reduced=np.empty(ya_p_perp_reduced.shape[:-1])
+        for n,(ys,covs) in enumerate(zip(ya_p_perp_reduced,scaled_sigmas)):
+            for m,(y,cov) in enumerate(zip(ys,covs)):
+                p_reduced[n][m]=scipy.stats.multivariate_normal.pdf(
+                    y,mean=np.zeros(p_reduced.shape[-1]),cov=cov)
+        print(p_reduced.shape,'gggggggg')
+        #normalisation?
+        #normalisation=np.sum(p_reduced,axis=0)
+        #p_reduced=p_reduced/np.broadcast_to(normalisation,p_reduced.shape)
+        p_reduced=np.prod(p_reduced,axis=1)
+        p=np.zeros((len(omega)))
+        p[selected_indexes]=p_reduced
+        if not addition:
+            if save_reduced:
+                self.omega=self.omega[selected_indexes]
+                self.values=p_reduced
+            else:
+                self.values=p
+        else:
+            if save_reduced:
+                self.omega=self.omega[selected_indexes]
+                self.values=self.values[selected_indexes]*p_reduced
+            else:
+                self.values=self.values*p
 
 
     def berny_test(
@@ -2900,6 +3036,12 @@ class all_information:
                    cube_size,sigma)
         self.random_initialise(1,maxdist=maxdist)
         self.make_p_gaussian(sigma,scale,delta)
+        a=self.values
+        #Test 
+        self.make_p_gaussian_test(sigma,scale,delta)
+        b=self.values
+        print(np.all(a==b),'Result')
+        #ET
         self.sample_next_batch(
             'lastline',sigma,scale,delta,batch_size=batch_size,
             rietveld_closest=rietveld_closest)
