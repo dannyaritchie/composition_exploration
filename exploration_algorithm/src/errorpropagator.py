@@ -133,10 +133,9 @@ class error_propagator:
             print('Error, projection vectors must have same dimension as space')
         else:
             self.us=us
-            print('hey')
-            print(us.shape)
             mean=mean-self.contained_point
             projected_means=np.einsum('ij,j',us,mean)
+
             projected_sigmas=np.einsum('ij,jk,kl',us,sigma,us.T)
             if sigma is None:
                 self.projected_sigmas=projected_sigmas

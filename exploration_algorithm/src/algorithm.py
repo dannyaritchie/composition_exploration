@@ -1121,6 +1121,7 @@ class all_information:
             omega=self.omega
         if f is None:
             f=self.values[:,0]
+        f=f/np.sum(f)
         u=np.swapaxes(np.broadcast_to(f,(omega.shape[1],len(f))),0,1)*omega
         mean=np.sum(u,axis=0)
         return mean
@@ -1821,30 +1822,29 @@ class all_information:
         #print(goal.shape)
         plotter.test_fig(self.goal,self.points,self.plot2d_lines,self.heatmap,self.xlim,self.ylim,self.omega,mean)
 
-    def make_p_gaussian(self,sigma,scale,delta,save_reduced=False):
+    def make_p_gaussian(
+            self,sigma,scale,delta,save_reduced=False,sigma_method=None):
         self.sigma=sigma
         self.scale=scale
         self.delta=delta
         basises=np.empty((self.lines.shape[0],self.lines.shape[1],self.lines.shape[1]))
         for i in range(len(self.lines)):
             basises[i]=self.get_basis(self.lines[i])
-        self.set_sigma_simulated(sigma,scale)
+        self.set_sigma_simulated(sigma,scale=scale,method=sigma_method)
         stdses=self.get_stdses(basises)
         self.create_p(
             self.omega,basises,self.points,stdses,delta=delta,
             save_reduced=save_reduced)
         
-    def make_p_gaussian_test(self,sigma,scale,delta,save_reduced=False):
-        self.sigma=sigma
-        self.scale=scale
-        self.delta=delta
+    def make_p_gaussian_test(
+            self,sigma,scale,save_reduced=False,sigma_method=None):
         basises=np.empty((self.lines.shape[0],self.lines.shape[1],self.lines.shape[1]))
         for i in range(len(self.lines)):
             basises[i]=self.get_basis_test(self.lines[i])
-        self.set_sigma_simulated(sigma,scale)
+        self.set_sigma_simulated(sigma,scale=scale,method=sigma_method)
         sigmas_perp=self.get_sigma_perp(basises)
         self.create_p_test(
-            self.omega,basises,self.points,sigmas_perp,delta=delta,
+            self.omega,basises,self.points,sigmas_perp,
             save_reduced=save_reduced)
         
     def get_stdses(self,basises):
@@ -1864,16 +1864,9 @@ class all_information:
         #in self.basis (but not the the first one) and store as a n,dim-3
         sigmas_perp=np.empty((
             basises.shape[0],basises.shape[1]-1,basises.shape[1]-1))
-        print('YAY')
-        print(self.sigmas[0])
         for n,basis in enumerate(basises):
-            print(basis,'llll')
             A=basis[:,1:]
-            print(A)
             sigmas_perp[n]=np.einsum('ij,jk,kl',A.T,self.sigmas[n],A)
-            print(sigmas_perp)
-            print(np.sqrt(0.3))
-            print(sigmas_perp.shape)
         return sigmas_perp
 
 
@@ -1898,18 +1891,22 @@ class all_information:
         # basis matmul (a point) gives the point in
         # representation where first element is size in estimated_direction and
         # subsequent elements are sizes in orthogonal directions
-        x=np.empty((dim-1,dim))
         A = np.transpose(np.array([estimated_direction]))
         for i in range(dim-1):
-            x[i] = self.find_orthonormal(A)
-            A = np.hstack((A,np.array([x[i]]).T))
-        print('ttt')
-        print(estimated_direction)
-        print(A)
+            x = self.find_orthonormal(A)
+            A = np.hstack((A,np.array([x]).T))
+
         return A
 
-    def set_sigma_simulated(self,sigma,scale=1):
-        self.sigmas=np.zeros((len(self.points),self.points.shape[1],self.points.shape[1]))+sigma/scale
+    def set_sigma_simulated(self,sigma,method='constant_sigma',scale=1):
+        if method=='constant_sigma':
+            self.sigmas=np.zeros(
+                (len(self.points),self.points.shape[1],self.points.shape[1]))
+            self.sigmas=self.sigmas+sigma*scale
+        elif method=='provided':
+            self.sigmas=np.array(sigma)*scale
+        else:
+            print('Error, unknown method for allocating to sigma to point')
 
     def create_p(self,omega,basises,samples,stdses,
                  delta=1,save_reduced=False,addition=False):
@@ -1982,8 +1979,9 @@ class all_information:
             else:
                 self.values=self.values*p
 
-    def create_p_test(self,omega,basises,samples,sigmas_perp,
-                 delta=1,save_reduced=False,addition=False):
+    def create_p_test(
+            self,omega,basises,samples,sigmas_perp,save_reduced=False,
+            addition=False):
         #function to calculate P for every point in omega
         #omega: numpy (o,dim) array for every point
         #basises: numpy (n,dim,dim) array for n samples such that
@@ -2001,34 +1999,24 @@ class all_information:
         n = len(samples)
         #m = sigmas_perp.shape[1]
         dim=self.points.shape[1]
-
         #reduce omega to only consider points which are in forward orthogonal
         #direction9
         y_broad=np.swapaxes(np.broadcast_to(omega,(n,o,dim)),0,1)
         a_broad=np.broadcast_to(samples,(o,n,dim))
         ya=(y_broad-a_broad)/self.cube_size
         basises_broad=np.broadcast_to(basises,(o,n,dim,dim))
-        print('Here')
-        print(basises.shape)
-        print(basises_broad.shape)
-        print(ya.shape)
         ya_p=np.einsum('...ji,...j->...i',basises_broad,ya)
         ya_p_parallel=ya_p[:,:,0]
         ya_p_perp=ya_p[:,:,1:]
         selected_indexes=np.all(ya_p_parallel>0,axis=1)
-
         ya_p_perp_reduced=ya_p_perp[selected_indexes]
+        print('remaining_points',len(ya_p_perp_reduced))
         ya_p_parallel_reduced=ya_p_parallel[selected_indexes]
 
-        print(ya_p_perp_reduced.shape,'gggggggg')
-        print(ya_p_parallel_reduced.shape)
 
         #scale sigmas
-        print(sigmas_perp.shape)
-        print(ya_p_parallel_reduced.shape)
         scaled_sigmas=np.einsum(
             'om,mij->omij',ya_p_parallel_reduced,sigmas_perp)
-        print('dddddd',scaled_sigmas.shape)
 
         '''
         #project points
@@ -2049,11 +2037,10 @@ class all_information:
         for n,(ys,covs) in enumerate(zip(ya_p_perp_reduced,scaled_sigmas)):
             for m,(y,cov) in enumerate(zip(ys,covs)):
                 p_reduced[n][m]=scipy.stats.multivariate_normal.pdf(
-                    y,mean=np.zeros(p_reduced.shape[-1]),cov=cov)
-        print(p_reduced.shape,'gggggggg')
+                    y,mean=np.zeros(self.constrained_dim-1),cov=cov)
         #normalisation?
-        #normalisation=np.sum(p_reduced,axis=0)
-        #p_reduced=p_reduced/np.broadcast_to(normalisation,p_reduced.shape)
+        normalisation=np.sum(p_reduced,axis=0)
+        p_reduced=p_reduced/np.broadcast_to(normalisation,p_reduced.shape)
         p_reduced=np.prod(p_reduced,axis=1)
         p=np.zeros((len(omega)))
         p[selected_indexes]=p_reduced
@@ -2523,7 +2510,7 @@ class all_information:
                     j=j/summ
                     post_score[n][m]=self.f_score(j,method='variance')
                 else:
-                    print('hey')
+                    #print('hey')
                     post_score[n][n]=0
         change_score=original_score-post_score
         return change_score
@@ -2975,7 +2962,6 @@ class all_information:
         normal_a=np.array(k['Normal a'])
         normal_b=np.array(k['Normal b'])
         cube_size=k['Cube size']
-        delta_param=k['Delta param']
         scale=k['Scale']
         contained_point=np.array(k['Contained point'])
         sigma=k['Sigma']
@@ -2984,6 +2970,28 @@ class all_information:
         num_points=random.randrange(2,max_points+1)
         con_dim=normal_a.shape[0]-2
         delta=cube_size/delta_param
+        normal_a=normal_a/np.linalg.norm(normal_a)
+        normal_b=normal_b/np.linalg.norm(normal_b)
+        normal_vectors=np.stack((normal_a,normal_b))
+        contained_point=contained_point*cube_size/np.sum(contained_point)
+        sigma=np.diag(np.array([sigma]*con_dim))
+
+        self.setup(normal_vectors,contained_point,
+                   cube_size,sigma)
+        self.random_initialise(num_points)
+        self.make_p_gaussian(sigma,scale,delta)
+
+    def setup_random_n(self,k):
+        normal_a=np.array(k['Normal a'])
+        normal_b=np.array(k['Normal b'])
+        cube_size=k['Cube size']
+        scale=k['Scale']
+        contained_point=np.array(k['Contained point'])
+        sigma=k['Sigma']
+        num_points=k['Number of points']
+
+        max_points=k.get('Max points')
+        con_dim=normal_a.shape[0]-2
         normal_a=normal_a/np.linalg.norm(normal_a)
         normal_b=normal_b/np.linalg.norm(normal_b)
         normal_vectors=np.stack((normal_a,normal_b))
@@ -3439,6 +3447,12 @@ class all_information:
             results=np.array([result])
         return results
 
+    def get_goal_distance(self,centre):
+        if centre=='mean':
+            c=self.get_mean(f=self.values)
+        if centre=='max':
+            c=self.get_max(f=self.values)
+        return np.linalg.norm(self.goal-c)/self.cube_size
     def add_samples_from_file(self,samples,formulas):
         #function to add samples from file (currenlty only adds points and does
         #not append them to an lists)
@@ -3455,6 +3469,33 @@ class all_information:
             pos=self.convert_point_to_constrained(pos_s)
             merged_mean,merged_sigma=self.get_known_ball(weights,formulas)
             self.samples.append((pos,merged_mean,merged_sigma))
+
+    def add_points_from_samples(self):
+        self.points=np.empty((0,self.constrained_dim))
+        self.lines=np.empty((0,self.constrained_dim))
+        for i in self.samples:
+            self.points=np.append(self.points,[i[0]],axis=0)
+            line=i[0]-i[1]
+            line=line/np.linalg.norm(line)
+            self.lines=np.append(self.lines,[line],axis=0)
+        #print(self.lines)
+        #print(self.points)
+
+    def make_p_for_points_general_sigma(self,method=None,scale=1):
+        sigma=None
+        if method == 'predicted':
+            sigma=self.get_samples_predicted_sigma()
+        elif method=='constant':
+            sigma=np.broadcast_to(np.diag([scale,scale]),
+                                  (len(self.points),self.constrained_dim,
+                                   self.constrained_dim))
+        elif method=='actual':
+            sigma=self.get_samples_true_sigma()
+        else:
+            print('Error unknown sigma generation method')
+        self.make_p_gaussian_test(
+            sigma,scale,save_reduced=False,sigma_method='provided')
+
 
     def get_known_ball(self,weights,formulas):
         #function to return mean and covariance matrix of average composition
@@ -3478,10 +3519,14 @@ class all_information:
         for s in self.samples:
             pos=s[0]
             mean=s[1]
-            est=pos-mean
+            est=(pos-mean)/self.cube_size
             est=est/np.linalg.norm(est)
-            g=self.goal-pos
+            g=(self.goal-pos)/self.cube_size
             gdist=np.linalg.norm(g)
+            if gdist==0:
+                print(pos)
+                print(self.goal)
+                print('hm')
             distances.append(gdist)
             g=g/np.linalg.norm(g)
             #print(np.dot(g,est),",",gdist)
@@ -3489,24 +3534,69 @@ class all_information:
             errors.append(d)
         return errors
 
-    def get_samples_expected_sigma(self):
+    def get_samples_predicted_sigma(self):
         errors=[]
         for s in self.samples:
             pos=s[0]
             mean=s[1]
             sigma=s[2]
-            est=pos-mean
-            sigma=sigma/np.linalg.norm(est)
-            est=est/np.linalg.norm(est)
-            basis=self.get_basis(est) 
-            sigmas=[]
-            for u in basis[1:]:
-                sigmas.append(np.sqrt(np.einsum('i,ij,j',u,sigma,u)))
-            sigmas=np.array(sigmas)
-            sigma=np.sqrt(np.dot(sigmas,sigmas))
-            errors.append(sigma)
+            est=(pos-mean)
+            est_n=est/np.linalg.norm(est)
+            basis=self.get_basis(est_n) 
+            b=basis[1:].T
+            s=np.einsum('ij,jk,kl',b.T,sigma,b)/(np.linalg.norm(est)**2)
+            errors.append(s)
         return errors
 
+    def get_samples_true_sigma(self):
+        tanthetas=self.get_samples_projected_orthogonal_distance()
+        sigmas=[]
+        for i in tanthetas:
+            s=i/np.sqrt(2/np.pi)
+            sigma=np.diag([s**2,s**2])
+            sigmas.append(sigma)
+        return np.array(sigmas)
+
+    def get_samples_expected_sigma(self):
+        errors=self.get_samples_predicted_sigma()
+        exp_errors=[]
+        for i in errors:
+            s=np.sqrt(i)
+            exp_errors.append(s*np.sqrt(2/np.pi))
+        print(np.mean(exp_errors))
+        return exp_errors
+
+    def get_constraint_lines(self):
+        #function that uses the assigned basis vectors to find the lines
+        #corresponding to x_i>0 in constrained space
+        line_coefficients=[]
+        for i in range(self.basis.shape[1]):
+            coefficients=[]
+            for j in range(self.basis.shape[0]):
+                coefficients.append(self.basis[j][i])
+            coefficients.append(-1*self.contained_point[i])
+            line_coefficients.append(coefficients)
+        return line_coefficients
+
+    def set_true_error(self,points,method, **kwargs):
+        true_error=None
+        if method == 'constant':
+            true_error=np.broadcast_to(kwargs['constant_sigma'],(len(points),self.constrained_dim,self.constrained_dim))
+        else:
+            print('Error, unknown method for setting true error')
+        return true_error
+
+    def set_predicted_error(self,points,method,true_error,**kwargs)
+        predicted_error=None
+        if method == 'exact_scaled':
+            predicted_error=true_error*kwargs['scale']
+        else:
+            print('Error, unknown method for setting predicted error')
+        return predicted_error
+
+
+#confused about cube size -> looke here
+#std Not variance from merged sigma scales with cube size
 
 
 

@@ -1915,18 +1915,21 @@ for cube_size in [50,200,400,600,800,1000]:
     '''
 #code for analysing error in old yun dataset
 '''
-)
-        print(ya_p_parallel_reduced[ifile="../../yun_old/yun_old.csv"
+file="../../yun_old/yun_old.csv"
 data=data_input(file)
-samples=data.get_samples(normalise_weights=False)
+samples=data.get_samples(normalise_weights=False)[10:11]
+samples+=data.get_samples(normalise_weights=False)[12:13]
+#samples+=data.get_samples(normalise_weights=False)[12:13]
 
-purities=[]
-for i in samples:
-    purities.append(100-sum(i[1]))
-#samples=data.get_samples(normalise_weights=True)
+#purities=[]
+#for i in samples:
+#    purities.append(100-sum(i[1]))
+#samples=data.get_samples(normalise_weights=True)[0:5]
+print('number of samples',len(samples))
 
 
 formulas=data.get_formulas()
+print(data.get_phase_field())
 #print(data.get_phase_field())
 for i in samples:
     s=13*i[0]/sum(i[0])
@@ -1934,15 +1937,40 @@ for i in samples:
 
 na=[1,3,-2,-1]
 nb=[1,1,1,1]
-cp=[1,2,1,1]
-cube_size=100
+cp=[1,1,1,2]
+cube_size=500
 
 setup=all_information()
 setup.grid(na,nb,cp,cube_size)
-setup.add_samples_from_file(samples,formulas)
 
-goal=[6,3,3,1]
+goal=[6,1,3,3]
 setup.goal=setup.convert_point_to_constrained(goal)
+
+setup.add_samples_from_file(samples,formulas)
+setup.add_points_from_samples()
+meanscore_pred=[]
+maxscore_pred=[]
+#for scale in [0.1,0.5,1,2,5,10]:
+scales=['0.01','0.1','0.5','1','2','10','100']
+for scale in scales:
+    setup.make_p_for_points_general_sigma(method='predicted',scale=0.1*float(scale))
+    meanscore_pred.append(setup.get_goal_distance('mean'))
+    maxscore_pred.append(setup.get_goal_distance('max'))
+
+fig,ax=plt.subplots(1,1)
+xaxis=np.arange(len(scales))
+ax.bar(xaxis-0.2,meanscore_pred,0.4,label='Centre = mean',color='b')
+ax.bar(xaxis+0.2,maxscore_pred,0.4,label='Centre = Max',color='r')
+plt.xticks(xaxis,scales)
+plt.legend()
+plt.xlabel('Scaling factor')
+plt.ylabel('Distance between target compositon and centre')
+plt.title('Performance of predicted errors'
+          '\nfor different scale factors')
+plt.show()
+
+
+
 
 predicted_errors=setup.get_samples_expected_sigma()
 distances=[]
@@ -1955,6 +1983,8 @@ for i in range(len(graph_error)):
     if graph_error[i] < 0:
         graph_error[i]+=2*np.pi
     graph_error[i]=180*graph_error[i]/np.pi
+    if graph_error[i] > 180:
+        graph_error[i]=360-graph_error[i]
     #print(graph_error[i])
 
 graph_p_error=np.arctan(predicted_errors)
@@ -1962,16 +1992,16 @@ for i in range(len(graph_p_error)):
     if graph_p_error[i] < 0:
         graph_p_error[i]+=2*np.pi
     graph_p_error[i]=180*graph_p_error[i]/np.pi
-    #print(graph_p_error[i])
-
+    print(graph_p_error[i])
 
 fig,ax=plt.subplots(1)
-ax.scatter(purities,graph_error,marker='x',color='blue',label='Experimental error')
+ax.scatter(purities,graph_error,marker='x',color='blue',label=r"$\alpha^*$")
 
 ax.scatter(
-    purities,graph_p_error,color='red',label='Predicted error (68% conf.)')
-ax.set_xlabel('Purity')
-ax.set_ylabel('Angular error')
+    purities,graph_p_error,color='red',label=r"E($\alpha$)")
+a='Purity $\deg$'
+ax.set_xlabel('Purity (%)')
+ax.set_ylabel('Angular error ($^\circ$)')
 ax.legend()
 plt.show()
 '''
@@ -1980,7 +2010,7 @@ plt.show()
 test=all_information()
 overseer=Results()
 num_trials=1
-output_file='../data/on_sphere_eval/n_batches_purity_6.csv'
+output_file='../data/random_innit/centre_test.csv'
 
 test_args={
     'Multiple batches':True,
@@ -1993,14 +2023,13 @@ setup_args={
     'Normal a':[2,2,-2,-2],
     'Normal b':[1,1,1,1],
     'Cube size':100,
-    'Delta param':80,
     'Scale':1,
     'Contained point':[1,1,1,1],
     'Sigma':0.3,
-    'Rietveld closest':True,
-    'Number of batches':20,
-    'Slope':2.29,
-    'Intercept':-65,
+    #'Rietveld closest':True,
+    #'Number of batches':20,
+    #'Slope':2.29,
+    #'Intercept':-65,
     #'Radius':5,
     'Centre':'mean',
     'Batch size':5,
@@ -2017,7 +2046,6 @@ result_descriptors=['Batch number','Closest distances','Chebyshev distances',
 overseer.setup_test(
     setup_type,setup_args,test_type,test_args,result_descriptors,
     output_file=output_file,num_trials=num_trials)
-    '''
 setup=all_information()
 normal_a = np.array([1,1,-1,-1])
 normal_b = np.array([1,1,1,1])
@@ -2028,23 +2056,73 @@ sigma=np.diag([0.05,0.05])
 setup.setup(normal_vectors,contained_point,cube_size,sigma)
 setup.random_initialise(2)
 setup.make_p_gaussian_test(sigma,1,1)
+'''
+#code for investigating yun old
+file="../../yun_old/yun_old.csv"
+data=data_input(file)
+samples=data.get_samples(normalise_weights=False)
+#purities=[]
+#for i in samples:
+#    purities.append(100-sum(i[1]))
+#samples=data.get_samples(normalise_weights=True)[0:5]
+print('number of samples',len(samples))
 
-plotter=Plotter('Berny')
-plotter.set_scatter_kwargs()
-plotter.set_heat_cbar_kwargs()
-plotter.set_directory('../../yun/')
-plotter.top='CaBr$_2$'
-plotter.left='ZrBr$_4$'
-plotter.right='LiBr'
 
-#plotter.mean_line_small(points,end_points,mean,small_means)
+formulas=data.get_formulas()
+print(data.get_phase_field())
+#print(data.get_phase_field())
 
-#p=setup.make_merged_ball_values(merged_mean,merged_sigma)
-#data=setup.convert_f_to_new_projection('berny',p,setup.omega)
-#plotter.merged_ball(data,mean)
+na=[1,3,-2,-1]
+nb=[1,1,1,1]
+cp=[1,1,1,2]
+cube_size=50
 
-points=setup.convert_points_to_new_projection('berny',setup.points)
-end_points=setup.get_end_points('berny')
+setup=all_information()
+setup.grid(na,nb,cp,cube_size)
+lines=setup.get_constraint_lines()
 
-data=setup.convert_f_to_new_projection('berny',setup.values,setup.omega)
-plotter.p_line(data,points,end_points)
+fig,ax=plt.subplots(1,1)
+x=np.linspace(-50,50,100)
+ys=[]
+for i in lines:
+    ys.append((i[2]-i[0]*x)/i[1])
+for i in ys:
+    ax.plot(x,i)
+plt.scatter(setup.omega[:,0],setup.omega[:,1])
+plt.show()
+
+
+'''
+goal=[6,1,3,3]
+setup.goal=setup.convert_point_to_constrained(goal)
+
+setup.add_samples_from_file(samples,formulas)
+setup.add_points_from_samples()
+meanscore_pred=[]
+maxscore_pred=[]
+#for scale in [0.1,0.5,1,2,5,10]:
+scales=['0.01','0.1','0.5','1','2','10','100']
+for scale in scales:
+    setup.make_p_for_points_general_sigma(method='predicted',scale=0.1*float(scale))
+    meanscore_pred.append(setup.get_goal_distance('mean'))
+    maxscore_pred.append(setup.get_goal_distance('max'))
+
+fig,ax=plt.subplots(1,1)
+xaxis=np.arange(len(scales))
+ax.bar(xaxis-0.2,meanscore_pred,0.4,label='Centre = mean',color='b')
+ax.bar(xaxis+0.2,maxscore_pred,0.4,label='Centre = Max',color='r')
+plt.xticks(xaxis,scales)
+plt.legend()
+plt.xlabel('Scaling factor')
+plt.ylabel('Distance between target compositon and centre')
+plt.title('Performance of predicted errors'
+          '\nfor different scale factors')
+plt.show()
+
+
+
+
+predicted_errors=setup.get_samples_expected_sigma()
+distances=[]
+'''
+#code for error estimating tests
